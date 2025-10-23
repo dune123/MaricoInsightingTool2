@@ -17,7 +17,7 @@ The project is now configured for Netlify deployment with the following changes:
 
 ### 3. Environment Variables
 The app automatically detects production mode and uses:
-- **Production**: `https://maricoinsighttool.onrender.com`
+- **Production**: `https://maricoinsightingtool2.onrender.com`
 - **Development**: `http://localhost:3002`
 
 ## Deployment Steps

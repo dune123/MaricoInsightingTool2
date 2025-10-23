@@ -2,7 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 // Base configuration for your backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.PROD ? 'https://maricoinsighttool.onrender.com' : 'http://localhost:3002');
+  (import.meta.env.PROD ? 'https://maricoinsightingtool2.onrender.com' : 'http://localhost:3002');
 
 // Create axios instance with default configuration
 const apiClient = axios.create({

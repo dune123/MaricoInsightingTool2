@@ -48,7 +48,7 @@ To be extra sure, you can set this environment variable in Render:
 
 Test your backend directly:
 ```bash
-curl https://maricoinsighttool.onrender.com/api/health
+curl https://maricoinsightingtool2.onrender.com/api/health
 ```
 
 Should return: `{"status":"OK","message":"Server is running"}`
