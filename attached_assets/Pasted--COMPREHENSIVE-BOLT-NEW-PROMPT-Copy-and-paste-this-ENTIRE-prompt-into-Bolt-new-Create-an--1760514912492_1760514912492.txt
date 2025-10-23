@@ -1,0 +1,294 @@
+# COMPREHENSIVE BOLT.NEW PROMPT
+
+Copy and paste this ENTIRE prompt into Bolt.new:
+
+---
+
+**Create an AI Charting Chatbot with these exact specifications:**
+
+## Project Structure
+
+```
+ai-charting-chatbot/
+├── backend/ (Flask Python)
+│   ├── app.py
+│   ├── analyzer.py
+│   ├── chart_generator.py
+│   ├── correlation_analyzer.py
+│   ├── config.py
+│   └── requirements.txt
+└── frontend/ (React + TypeScript)
+    ├── src/
+    │   ├── components/
+    │   │   ├── ChatInterface.tsx
+    │   │   ├── ChartRenderer.tsx
+    │   │   ├── FileUpload.tsx
+    │   │   └── MessageBubble.tsx
+    │   ├── services/api.ts
+    │   ├── types/index.ts
+    │   ├── App.tsx
+    │   └── index.css
+    └── package.json
+```
+
+---
+
+## Tech Stack
+
+**Backend:**
+- Flask 3.0.0 with flask-cors
+- OpenAI API (gpt-4o model)
+- Pandas 2.1.0, NumPy, SciPy for data processing
+- Python 3.10+
+
+**Frontend:**
+- React 18 + TypeScript
+- Vite build tool
+- Tailwind CSS for styling
+- Recharts 2.10.0 for interactive charts
+- Axios for API calls
+- react-dropzone for file upload
+- lucide-react for icons
+
+---
+
+## Core Functionality
+
+### 1. File Upload & Initial Analysis
+- User uploads CSV/XLSX file (max 10MB)
+- Backend reads file with Pandas
+- AI (OpenAI GPT-4o) analyzes data structure and generates 4-6 chart specifications
+- Backend processes data according to specs (groupby, aggregations)
+- Frontend renders charts with Recharts
+- Display 5-7 AI-generated insights with specific numbers
+
+### 2. Chat Interface
+- User asks questions in natural language
+- AI classifies question type: correlation, comparison, trend, or general
+- For "what affects X" questions: automatically calculate correlations and generate scatter plots
+- For other questions: AI generates answer + relevant chart specs
+- Maintain conversation history for context
+
+### 3. Chart Types Support
+- Line charts (time series, trends)
+- Bar charts (comparisons, rankings - top 10 only)
+- Scatter plots (correlations, relationships)
+- Pie charts (proportions - top 5 categories)
+- Area charts (cumulative trends)
+
+---
+
+## Key Implementation Details
+
+### Backend Architecture
+
+**analyzer.py** should:
+1. `analyze_upload(df)` - Initial analysis
+   - Create data summary (row count, column types, statistics)
+   - Call OpenAI to generate chart specs as JSON
+   - Generate insights using AI with specific metrics
+   - Return: chart_specs, insights, summary
+
+2. `answer_question(df, question, chat_history)` - Handle questions
+   - Classify question type using AI
+   - Route to correlation analyzer if asking "what affects X"
+   - Otherwise generate answer + optional chart specs
+   - Return: answer, charts, insights
+
+3. `_classify_question()` - Determine if correlation analysis needed
+   - Output JSON: `{type: "correlation"|"general", target_variable: "column_name"}`
+
+**correlation_analyzer.py** should:
+- Calculate `df.corr()[target_variable]` for all numeric columns
+- Get top 5 positive and top 3 negative correlations
+- Generate scatter plots for top 3 correlations
+- Generate bar chart showing correlation strengths
+- AI generates insights explaining correlations with caution about causation
+
+**chart_generator.py** should:
+- Take chart specs from AI and prepare data
+- For line/area: sort by x, optionally aggregate
+- For bar: aggregate, sort by value descending, take top 10
+- For scatter: sample to 1000 points if needed, remove NaN
+- For pie: aggregate, take top 5 categories
+- Return data as list of dicts: `[{x: val, y: val}, ...]`
+
+**app.py** Flask routes:
+- `POST /api/upload` - multipart/form-data, returns session_id + charts + insights
+- `POST /api/chat` - JSON body with session_id, message, chat_history
+- Store uploaded DataFrames in-memory dict: `uploaded_data[session_id] = df`
+
+### Frontend Architecture
+
+**ChartRenderer.tsx** using Recharts:
+- Switch on chart.type
+- Line: `<LineChart>` with `<Line>`, `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Tooltip>`, `<Legend>`
+- Bar: `<BarChart>` with `<Bar>`
+- Scatter: `<ScatterChart>` with `<Scatter>`
+- Pie: `<PieChart>` with `<Pie>` and `<Cell>` for colors
+- All wrapped in `<ResponsiveContainer width="100%" height={300}>`
+- Use color palette: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+
+**ChatInterface.tsx**:
+- Display messages with `MessageBubble` component
+- Input field at bottom with Send button
+- Show suggestion buttons when no messages
+- Auto-scroll to bottom on new messages
+- Loading indicator while processing
+
+**FileUpload.tsx** using react-dropzone:
+- Drag & drop zone with hover effects
+- Accept: .csv, .xlsx, .xls
+- Show upload icon (lucide-react Upload)
+- Loading spinner during upload
+
+**App.tsx** main flow:
+1. Show FileUpload initially
+2. On file upload: call API, store session_id, show initial charts/insights
+3. Switch to ChatInterface
+4. On message send: call API, add user + assistant messages
+5. "Upload New File" button to reset
+
+---
+
+## Critical AI Prompt Engineering
+
+### For Chart Generation:
+```
+"Analyze this dataset and generate 4-6 chart specifications.
+DATA SUMMARY: {summary}
+Output ONLY valid JSON array with objects containing:
+- type: "line"|"bar"|"scatter"|"pie"|"area"
+- title: descriptive title
+- x: column name
+- y: column name  
+- aggregate: "sum"|"mean"|"count" if needed
+Choose charts that reveal insights."
+```
+
+### For Insights:
+```
+"Provide 5-7 specific, actionable insights.
+DATA: {summary}
+METRICS: {calculated_stats}
+Each insight must:
+- Include specific numbers and percentages
+- Explain WHY it matters
+- Provide actionable recommendation
+Output numbered list."
+```
+
+### For Question Classification:
+```
+"Classify this question:
+QUESTION: {user_question}
+COLUMNS: {df.columns}
+Output JSON:
+{
+  "type": "correlation"|"general",
+  "target_variable": "column_name or null"
+}"
+```
+
+---
+
+## Styling Requirements
+
+- Tailwind CSS for all styling
+- Header: white background, shadow, logo with BarChart3 icon
+- FileUpload: dashed border, hover effects, blue accent colors
+- Chat: gray-50 background, white message bubbles (blue for user, gray for assistant)
+- Charts: white cards with shadow, rounded corners, 6px padding
+- Insights: blue-50 background with blue-500 left border, bullet points
+
+---
+
+## Environment Variables
+
+Backend `.env`:
+```
+OPENAI_API_KEY=your_key_here
+```
+
+Frontend `.env`:
+```
+VITE_API_URL=http://localhost:5000/api
+```
+
+---
+
+## Dependencies
+
+**Backend requirements.txt:**
+```
+flask==3.0.0
+flask-cors==4.0.0
+pandas==2.1.0
+numpy==1.24.0
+scipy==1.11.0
+openai==1.3.0
+openpyxl==3.1.0
+python-dotenv==1.0.0
+```
+
+**Frontend package.json:**
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.10.0",
+    "axios": "^1.6.0",
+    "react-dropzone": "^14.2.3",
+    "lucide-react": "^0.300.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0"
+  }
+}
+```
+
+---
+
+## Example User Flow
+
+1. User uploads sales.csv
+2. AI analyzes: "This is sales data with revenue, date, region, product"
+3. AI generates: Line chart (revenue over time), Bar chart (revenue by region), Scatter (quantity vs revenue), Bar (top products)
+4. Backend processes data, frontend renders 4 interactive Recharts
+5. Shows insights: "Revenue grew 34% in Q4 ($2.3M to $3.1M)..."
+6. User asks: "What affects revenue?"
+7. Backend calculates correlations: marketing_spend (0.87), quantity (0.65)
+8. Generates 3 scatter plots + correlation bar chart
+9. AI insight: "Marketing spend shows strongest correlation (r=0.87)..."
+
+---
+
+## Important Rules
+
+- NO localStorage/sessionStorage (not supported in Bolt)
+- Use in-memory storage only (dict for session data)
+- All charts must be interactive Recharts components, NOT images
+- AI responses must include specific numbers, not vague statements
+- Correlation analysis is automatic for "what affects X" questions
+- Sample scatter plots to 1000 points if dataset > 1000 rows
+- Top 10 for bar charts, top 5 for pie charts
+- All API calls use Axios with proper error handling
+- TypeScript types for all props and responses
+- Responsive design with Tailwind
+
+---
+
+## Run Configuration
+
+Backend: `python app.py` on port 5000
+Frontend: `npm run dev` on port 3000 with proxy to backend
+
+---
+
+**Build this EXACT system. Use OpenAI GPT-4o model. Make charts interactive with Recharts. Implement automatic correlation detection. Include conversation memory. Use Tailwind styling. Make it production-ready.**
