@@ -25,12 +25,32 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor for error handling with CORS retry logic
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
     return response;
   },
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    // Handle CORS and network errors with retry logic
+    if (error.code === 'ERR_NETWORK' || 
+        error.message.includes('CORS') || 
+        error.message.includes('Network Error') ||
+        error.message.includes('Failed to fetch')) {
+      
+      console.log('CORS/Network error detected, retrying once...');
+      
+      // Retry once for CORS/network errors
+      try {
+        if (error.config) {
+          const retryResponse = await apiClient.request(error.config);
+          return retryResponse;
+        }
+      } catch (retryError) {
+        console.log('Retry failed:', retryError);
+        throw new Error('Network error: CORS issue persists after retry');
+      }
+    }
+    
     if (error.response) {
       // Server responded with error status
       const message = error.response.data?.message || error.message || 'Request failed';

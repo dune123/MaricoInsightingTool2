@@ -30,8 +30,11 @@ export const corsConfig = cors({
   origin: (origin, callback) => {
     const allowedOrigins = getAllowedOrigins();
     
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (like mobile apps, curl, or some browsers)
+    if (!origin) {
+      console.log('Request with no origin - allowing');
+      return callback(null, true);
+    }
     
     // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
@@ -50,11 +53,28 @@ export const corsConfig = cors({
       return callback(null, true);
     }
     
+    // Allow localhost in development
+    if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost')) {
+      console.log('Allowing localhost in development:', origin);
+      return callback(null, true);
+    }
+    
     console.log('CORS blocked origin:', origin);
+    console.log('Allowed origins:', allowedOrigins);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 });
