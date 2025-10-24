@@ -8,9 +8,21 @@ interface MessageBubbleProps {
   message: Message;
   sampleRows?: Record<string, any>[];
   columns?: string[];
+  numericColumns?: string[];
+  dateColumns?: string[];
+  totalRows?: number;
+  totalColumns?: number;
 }
 
-export function MessageBubble({ message, sampleRows, columns }: MessageBubbleProps) {
+export function MessageBubble({ 
+  message, 
+  sampleRows, 
+  columns,
+  numericColumns,
+  dateColumns,
+  totalRows,
+  totalColumns
+}: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   return (
@@ -40,7 +52,15 @@ export function MessageBubble({ message, sampleRows, columns }: MessageBubblePro
 
         {!isUser && sampleRows && columns && sampleRows.length > 0 && (
           <div className="mt-3">
-            <DataPreview data={sampleRows} columns={columns} />
+            <DataPreview 
+              data={sampleRows} 
+              columns={columns}
+              numericColumns={numericColumns}
+              dateColumns={dateColumns}
+              totalRows={totalRows}
+              totalColumns={totalColumns}
+              defaultExpanded={true}
+            />
           </div>
         )}
 

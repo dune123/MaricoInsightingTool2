@@ -13,6 +13,10 @@ interface ChatInterfaceProps {
   isLoading: boolean;
   sampleRows?: Record<string, any>[];
   columns?: string[];
+  numericColumns?: string[];
+  dateColumns?: string[];
+  totalRows?: number;
+  totalColumns?: number;
 }
 
 const SUGGESTIONS = [
@@ -22,7 +26,18 @@ const SUGGESTIONS = [
   "Analyze correlations in the data"
 ];
 
-export function ChatInterface({ messages, onSendMessage, onUploadNew, isLoading, sampleRows, columns }: ChatInterfaceProps) {
+export function ChatInterface({ 
+  messages, 
+  onSendMessage, 
+  onUploadNew, 
+  isLoading, 
+  sampleRows, 
+  columns,
+  numericColumns,
+  dateColumns,
+  totalRows,
+  totalColumns
+}: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +76,10 @@ export function ChatInterface({ messages, onSendMessage, onUploadNew, isLoading,
               message={message} 
               sampleRows={idx === 0 ? sampleRows : undefined}
               columns={idx === 0 ? columns : undefined}
+              numericColumns={idx === 0 ? numericColumns : undefined}
+              dateColumns={idx === 0 ? dateColumns : undefined}
+              totalRows={idx === 0 ? totalRows : undefined}
+              totalColumns={idx === 0 ? totalColumns : undefined}
             />
           ))}
           
