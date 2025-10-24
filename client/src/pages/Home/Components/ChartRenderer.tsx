@@ -66,25 +66,30 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
 
   const chartColor = COLORS[index % COLORS.length];
-  const chartHeight = isSingleChart ? 400 : 300;
+  const chartHeight = isSingleChart ? 450 : 380;
 
   const renderChart = () => {
     switch (type) {
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <LineChart data={data} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+            <LineChart data={data} margin={{ left: 50, right: 20, top: 30, bottom: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                angle={-45}
+                textAnchor="end"
                 stroke="hsl(var(--muted-foreground))"
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
+                height={70}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
                 tickFormatter={formatAxisLabel}
-                width={70}
+                width={60}
+                label={{ value: y, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -96,7 +101,6 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 12 }} />
               <Line
                 type="monotone"
                 dataKey={y}
@@ -112,18 +116,23 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={data} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+            <BarChart data={data} margin={{ left: 50, right: 20, top: 30, bottom: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                angle={-45}
+                textAnchor="end"
                 stroke="hsl(var(--muted-foreground))"
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
+                height={70}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
                 tickFormatter={formatAxisLabel}
-                width={70}
+                width={60}
+                label={{ value: y, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -135,7 +144,6 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 12 }} />
               <Bar dataKey={y} fill={chartColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
@@ -154,28 +162,29 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <ScatterChart margin={{ left: 20, right: 20, top: 5, bottom: 5 }}>
+            <ScatterChart margin={{ left: 50, right: 20, top: 30, bottom: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
                 type="number"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
-                name={x}
                 domain={xDomain || ['auto', 'auto']}
                 tickFormatter={formatAxisLabel}
                 tickCount={getTickCount(xDomain)}
+                height={70}
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
               />
               <YAxis
                 dataKey={y}
                 type="number"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
-                name={y}
                 domain={yDomain || ['auto', 'auto']}
                 tickFormatter={formatAxisLabel}
                 tickCount={getTickCount(yDomain)}
-                width={80}
+                width={60}
+                label={{ value: y, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -187,7 +196,6 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 12 }} />
               <Scatter name={`${x} vs ${y}`} data={data} fill={chartColor} fillOpacity={0.7} />
             </ScatterChart>
           </ResponsiveContainer>
@@ -228,18 +236,23 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
       case 'area':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <AreaChart data={data} margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+            <AreaChart data={data} margin={{ left: 50, right: 20, top: 30, bottom: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                angle={-45}
+                textAnchor="end"
                 stroke="hsl(var(--muted-foreground))"
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
+                height={70}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
                 tickFormatter={formatAxisLabel}
-                width={70}
+                width={60}
+                label={{ value: y, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -251,7 +264,6 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 12 }} />
               <Area
                 type="monotone"
                 dataKey={y}
@@ -299,6 +311,35 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
         </CardHeader>
         <CardContent className="pt-0">
           {renderChart()}
+          
+          {/* Key Insight and Recommendation */}
+          {(chart.keyInsight || chart.recommendation) && (
+            <div className="mt-4 space-y-3 border-t pt-4">
+              {chart.keyInsight && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">Key Insight</p>
+                      <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">{chart.keyInsight}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {chart.recommendation && (
+                <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                    <div>
+                      <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">Recommendation</p>
+                      <p className="text-sm text-green-800 dark:text-green-200 leading-relaxed">{chart.recommendation}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
       

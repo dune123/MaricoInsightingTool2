@@ -15,12 +15,20 @@ export default function Home({ resetTrigger = 0 }: HomeProps) {
     initialInsights,
     sampleRows,
     columns,
+    numericColumns,
+    dateColumns,
+    totalRows,
+    totalColumns,
     setSessionId,
     setMessages,
     setInitialCharts,
     setInitialInsights,
     setSampleRows,
     setColumns,
+    setNumericColumns,
+    setDateColumns,
+    setTotalRows,
+    setTotalColumns,
     resetState,
   } = useHomeState();
 
@@ -32,6 +40,10 @@ export default function Home({ resetTrigger = 0 }: HomeProps) {
     setInitialInsights,
     setSampleRows,
     setColumns,
+    setNumericColumns,
+    setDateColumns,
+    setTotalRows,
+    setTotalColumns,
     setMessages,
   });
 
@@ -68,6 +80,10 @@ export default function Home({ resetTrigger = 0 }: HomeProps) {
       isLoading={chatMutation.isPending}
       sampleRows={sampleRows}
       columns={columns}
+      numericColumns={numericColumns}
+      dateColumns={dateColumns}
+      totalRows={totalRows}
+      totalColumns={totalColumns}
     />
   );
 }

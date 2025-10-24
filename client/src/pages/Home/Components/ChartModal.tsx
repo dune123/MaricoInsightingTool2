@@ -66,18 +66,23 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={600}>
-            <LineChart data={data} margin={{ left: 20, right: 30, top: 20, bottom: 20 }}>
+            <LineChart data={data} margin={{ left: 80, right: 20, top: 30, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                angle={-45}
+                textAnchor="end"
                 stroke="hsl(var(--muted-foreground))"
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
+                height={60}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
                 tickFormatter={formatAxisLabel}
-                width={80}
+                width={90}
+                label={{ value: y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -90,7 +95,6 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: '14px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 20, fontSize: '14px' }} />
               <Line
                 type="monotone"
                 dataKey={y}
@@ -106,18 +110,23 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={600}>
-            <BarChart data={data} margin={{ left: 20, right: 30, top: 20, bottom: 20 }}>
+            <BarChart data={data} margin={{ left: 80, right: 20, top: 30, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                angle={-45}
+                textAnchor="end"
                 stroke="hsl(var(--muted-foreground))"
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
+                height={60}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
                 tickFormatter={formatAxisLabel}
-                width={80}
+                width={90}
+                label={{ value: y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -130,7 +139,6 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: '14px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 20, fontSize: '14px' }} />
               <Bar dataKey={y} fill={chartColor} radius={[6, 6, 0, 0]} maxBarSize={60} />
             </BarChart>
           </ResponsiveContainer>
@@ -148,28 +156,29 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
 
         return (
           <ResponsiveContainer width="100%" height={600}>
-            <ScatterChart margin={{ left: 30, right: 30, top: 20, bottom: 20 }}>
+            <ScatterChart margin={{ left: 80, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
                 type="number"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
-                name={x}
                 domain={xDomain || ['auto', 'auto']}
                 tickFormatter={formatAxisLabel}
                 tickCount={getTickCount(xDomain)}
+                height={60}
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
               />
               <YAxis
                 dataKey={y}
                 type="number"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
-                name={y}
                 domain={yDomain || ['auto', 'auto']}
                 tickFormatter={formatAxisLabel}
                 tickCount={getTickCount(yDomain)}
-                width={100}
+                width={90}
+                label={{ value: y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -182,7 +191,6 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: '14px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 20, fontSize: '14px' }} />
               <Scatter name={`${x} vs ${y}`} data={data} fill={chartColor} fillOpacity={0.8} />
             </ScatterChart>
           </ResponsiveContainer>
@@ -224,18 +232,23 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
       case 'area':
         return (
           <ResponsiveContainer width="100%" height={600}>
-            <AreaChart data={data} margin={{ left: 20, right: 30, top: 20, bottom: 20 }}>
+            <AreaChart data={data} margin={{ left: 80, right: 20, top: 30, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+                angle={-45}
+                textAnchor="end"
                 stroke="hsl(var(--muted-foreground))"
+                label={{ value: x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
+                height={60}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
                 stroke="hsl(var(--muted-foreground))"
                 tickFormatter={formatAxisLabel}
-                width={80}
+                width={90}
+                label={{ value: y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
               />
               <Tooltip
                 contentStyle={{
@@ -248,7 +261,6 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: '14px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
-              <Legend wrapperStyle={{ paddingTop: 20, fontSize: '14px' }} />
               <Area
                 type="monotone"
                 dataKey={y}

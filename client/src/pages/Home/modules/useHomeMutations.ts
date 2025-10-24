@@ -11,6 +11,10 @@ interface UseHomeMutationsProps {
   setInitialInsights: (insights: UploadResponse['insights']) => void;
   setSampleRows: (rows: Record<string, any>[]) => void;
   setColumns: (columns: string[]) => void;
+  setNumericColumns: (columns: string[]) => void;
+  setDateColumns: (columns: string[]) => void;
+  setTotalRows: (rows: number) => void;
+  setTotalColumns: (columns: number) => void;
   setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
 }
 
@@ -22,6 +26,10 @@ export const useHomeMutations = ({
   setInitialInsights,
   setSampleRows,
   setColumns,
+  setNumericColumns,
+  setDateColumns,
+  setTotalRows,
+  setTotalColumns,
   setMessages,
 }: UseHomeMutationsProps) => {
   const { toast } = useToast();
@@ -40,6 +48,10 @@ export const useHomeMutations = ({
       if (data.sampleRows && data.sampleRows.length > 0) {
         setSampleRows(data.sampleRows);
         setColumns(data.summary.columns.map(c => c.name));
+        setNumericColumns(data.summary.numericColumns);
+        setDateColumns(data.summary.dateColumns);
+        setTotalRows(data.summary.rowCount);
+        setTotalColumns(data.summary.columnCount);
       }
       
       // Create initial assistant message with charts and insights
