@@ -22,6 +22,8 @@ export function processChartData(
     return [];
   }
   
+  console.log(`   Data rows available: ${data.length}`);
+  
   // Check if columns exist in data
   const firstRow = data[0];
   if (!firstRow) {
@@ -54,11 +56,49 @@ export function processChartData(
   
   if (xValues.length === 0) {
     console.warn(`❌ No valid X values in column "${x}" for chart: ${chartSpec.title}`);
+    console.log(`   Trying to find alternative X column...`);
+    
+    // Try to find a similar column
+    const alternativeX = availableColumns.find(col => 
+      col.toLowerCase().includes(x.toLowerCase().split(' ')[0]) ||
+      x.toLowerCase().split(' ')[0].includes(col.toLowerCase())
+    );
+    
+    if (alternativeX) {
+      console.log(`   Using alternative X column: "${alternativeX}"`);
+      const newXValues = data.map(row => row[alternativeX]).filter(v => v !== null && v !== undefined && v !== '');
+      if (newXValues.length > 0) {
+        console.log(`   Alternative X column has ${newXValues.length} valid values`);
+        // Update the chart spec to use the alternative column
+        chartSpec.x = alternativeX;
+        return processChartData(data, chartSpec);
+      }
+    }
+    
     return [];
   }
   
   if (yValues.length === 0) {
     console.warn(`❌ No valid Y values in column "${y}" for chart: ${chartSpec.title}`);
+    console.log(`   Trying to find alternative Y column...`);
+    
+    // Try to find a similar column
+    const alternativeY = availableColumns.find(col => 
+      col.toLowerCase().includes(y.toLowerCase().split(' ')[0]) ||
+      y.toLowerCase().split(' ')[0].includes(col.toLowerCase())
+    );
+    
+    if (alternativeY) {
+      console.log(`   Using alternative Y column: "${alternativeY}"`);
+      const newYValues = data.map(row => row[alternativeY]).filter(v => v !== null && v !== undefined && v !== '');
+      if (newYValues.length > 0) {
+        console.log(`   Alternative Y column has ${newYValues.length} valid values`);
+        // Update the chart spec to use the alternative column
+        chartSpec.y = alternativeY;
+        return processChartData(data, chartSpec);
+      }
+    }
+    
     return [];
   }
 
