@@ -50,6 +50,78 @@ export const dataSummarySchema = z.object({
 
 export type DataSummary = z.infer<typeof dataSummarySchema>;
 
+// Column Statistics Schema
+export const columnStatisticsSchema = z.object({
+  count: z.number(),
+  min: z.number(),
+  max: z.number(),
+  sum: z.number(),
+  mean: z.number(),
+  median: z.number(),
+  standardDeviation: z.number(),
+  q1: z.number(),
+  q3: z.number(),
+  range: z.number(),
+  variance: z.number(),
+});
+
+export type ColumnStatistics = z.infer<typeof columnStatisticsSchema>;
+
+// Analysis Metadata Schema
+export const analysisMetadataSchema = z.object({
+  totalProcessingTime: z.number(),
+  aiModelUsed: z.string(),
+  fileSize: z.number(),
+  analysisVersion: z.string(),
+});
+
+export type AnalysisMetadata = z.infer<typeof analysisMetadataSchema>;
+
+// Complete Analysis Data Schema
+export const completeAnalysisDataSchema = z.object({
+  id: z.string(),
+  fileName: z.string(),
+  uploadedAt: z.number(),
+  createdAt: z.number(),
+  lastUpdatedAt: z.number(),
+  dataSummary: dataSummarySchema,
+  rawData: z.array(z.record(z.union([z.string(), z.number(), z.null()]))),
+  sampleRows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))),
+  columnStatistics: z.record(z.string(), columnStatisticsSchema),
+  charts: z.array(chartSpecSchema),
+  insights: z.array(insightSchema),
+  messages: z.array(messageSchema),
+  blobInfo: z.object({
+    blobUrl: z.string(),
+    blobName: z.string(),
+  }).optional(),
+  analysisMetadata: analysisMetadataSchema,
+  sessionId: z.string(),
+});
+
+export type CompleteAnalysisData = z.infer<typeof completeAnalysisDataSchema>;
+
+// Analysis Session Summary Schema
+export const analysisSessionSummarySchema = z.object({
+  id: z.string(),
+  fileName: z.string(),
+  uploadedAt: z.number(),
+  createdAt: z.number(),
+  lastUpdatedAt: z.number(),
+  dataSummary: dataSummarySchema,
+  chartsCount: z.number(),
+  insightsCount: z.number(),
+  messagesCount: z.number(),
+  blobInfo: z.object({
+    blobUrl: z.string(),
+    blobName: z.string(),
+  }).optional(),
+  analysisMetadata: analysisMetadataSchema,
+  sessionId: z.string(),
+});
+
+export type AnalysisSessionSummary = z.infer<typeof analysisSessionSummarySchema>;
+
 // API Response Types
 export const uploadResponseSchema = z.object({
   sessionId: z.string(),
@@ -57,6 +129,11 @@ export const uploadResponseSchema = z.object({
   charts: z.array(chartSpecSchema),
   insights: z.array(insightSchema),
   sampleRows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))).optional(),
+  chatId: z.string().optional(), // CosmosDB chat document ID
+  blobInfo: z.object({
+    blobUrl: z.string(),
+    blobName: z.string(),
+  }).optional(), // Azure Blob Storage info
 });
 
 export type UploadResponse = z.infer<typeof uploadResponseSchema>;
@@ -68,6 +145,40 @@ export const chatResponseSchema = z.object({
 });
 
 export type ChatResponse = z.infer<typeof chatResponseSchema>;
+
+// Data Retrieval Response Schemas
+export const userAnalysisSessionsResponseSchema = z.object({
+  sessions: z.array(analysisSessionSummarySchema),
+  totalCount: z.number(),
+});
+
+export type UserAnalysisSessionsResponse = z.infer<typeof userAnalysisSessionsResponseSchema>;
+
+export const columnStatisticsResponseSchema = z.object({
+  chatId: z.string(),
+  fileName: z.string(),
+  columnStatistics: z.record(z.string(), columnStatisticsSchema),
+  numericColumns: z.array(z.string()),
+  totalNumericColumns: z.number(),
+});
+
+export type ColumnStatisticsResponse = z.infer<typeof columnStatisticsResponseSchema>;
+
+export const rawDataResponseSchema = z.object({
+  chatId: z.string(),
+  fileName: z.string(),
+  data: z.array(z.record(z.union([z.string(), z.number(), z.null()]))),
+  pagination: z.object({
+    page: z.number(),
+    limit: z.number(),
+    totalRows: z.number(),
+    totalPages: z.number(),
+    hasNextPage: z.boolean(),
+    hasPrevPage: z.boolean(),
+  }),
+});
+
+export type RawDataResponse = z.infer<typeof rawDataResponseSchema>;
 
 // Session Storage (backend only)
 export interface SessionData {
