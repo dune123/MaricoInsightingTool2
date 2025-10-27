@@ -4,24 +4,19 @@ import { checkEnvironmentVariables } from './envCheck';
 // Check environment variables on import
 checkEnvironmentVariables();
 
-// Detect current origin for dynamic configuration
-const getCurrentOrigin = () => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  return import.meta.env.VITE_AZURE_REDIRECT_URI || 'http://localhost:3000';
-};
-
-const currentOrigin = getCurrentOrigin();
-
-// MSAL configuration
-export const msalConfig: Configuration = {
-  auth: {
-    clientId: import.meta.env.VITE_AZURE_CLIENT_ID || '',
-    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || ''}`,
-    redirectUri: import.meta.env.VITE_AZURE_REDIRECT_URI || currentOrigin,
-    postLogoutRedirectUri: import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI || currentOrigin,
-  },
+// MSAL configuration factory - creates config at runtime
+export const createMsalConfig = (): Configuration => {
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  
+  console.log('🔧 Creating MSAL config with origin:', currentOrigin);
+  
+  return {
+    auth: {
+      clientId: import.meta.env.VITE_AZURE_CLIENT_ID || '',
+      authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || ''}`,
+      redirectUri: import.meta.env.VITE_AZURE_REDIRECT_URI || currentOrigin,
+      postLogoutRedirectUri: currentOrigin || import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI ,
+    },
   cache: {
     cacheLocation: 'sessionStorage', // This configures where your cache will be stored
     storeAuthStateInCookie: false, // Set this to "true" if you are having issues on IE11 or Edge

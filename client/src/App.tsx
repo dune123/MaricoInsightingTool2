@@ -15,7 +15,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AuthCallback from "@/components/AuthCallback";
 import { PublicClientApplication } from '@azure/msal-browser';
 import { MsalProvider } from '@azure/msal-react';
-import { msalConfig } from '@/auth/msalConfig';
+import { createMsalConfig } from '@/auth/msalConfig';
 
 type PageType = 'home' | 'dashboard' | 'analysis';
 
@@ -99,7 +99,7 @@ function AuthRedirectHandler() {
 }
 
 // Create MSAL instance
-const msalInstance = new PublicClientApplication(msalConfig);
+const msalInstance = new PublicClientApplication(createMsalConfig());
 
 function App() {
   return (
