@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearUserEmail();
       
       const currentOrigin = window.location.origin;
-      console.log('🚪 Logging out, redirecting to:', currentOrigin);
+      console.log('🔧 Logout redirecting to:', currentOrigin);
       
       // Use logoutRedirect with explicit postLogoutRedirectUri
       await instance.logoutRedirect({

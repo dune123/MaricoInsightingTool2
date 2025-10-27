@@ -98,7 +98,7 @@ function AuthRedirectHandler() {
   return <Router />;
 }
 
-// Create MSAL instance
+// Create MSAL instance with dynamic config
 const msalInstance = new PublicClientApplication(createMsalConfig());
 
 function App() {

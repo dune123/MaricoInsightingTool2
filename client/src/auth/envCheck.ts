@@ -17,6 +17,7 @@ export const checkEnvironmentVariables = () => {
   console.log('Client ID:', import.meta.env.VITE_AZURE_CLIENT_ID ? 'Set' : 'Missing');
   console.log('Tenant ID:', import.meta.env.VITE_AZURE_TENANT_ID ? 'Set' : 'Missing');
   console.log('Redirect URI:', import.meta.env.VITE_AZURE_REDIRECT_URI || 'Using default (http://localhost:3000)');
+  console.log('Post-logout Redirect URI:', import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI || 'Using dynamic origin');
   
   return true;
 };

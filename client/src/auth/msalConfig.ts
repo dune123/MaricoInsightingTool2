@@ -9,13 +9,15 @@ export const createMsalConfig = (): Configuration => {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
   
   console.log('🔧 Creating MSAL config with origin:', currentOrigin);
+  console.log('🔧 Environment VITE_AZURE_POST_LOGOUT_REDIRECT_URI:', import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI);
+  console.log('🔧 Final postLogoutRedirectUri:', import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI || currentOrigin);
   
   return {
     auth: {
       clientId: import.meta.env.VITE_AZURE_CLIENT_ID || '',
       authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || ''}`,
       redirectUri: import.meta.env.VITE_AZURE_REDIRECT_URI || currentOrigin,
-      postLogoutRedirectUri: currentOrigin || import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI ,
+      postLogoutRedirectUri: import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI || currentOrigin,
     },
   cache: {
     cacheLocation: 'sessionStorage', // This configures where your cache will be stored
