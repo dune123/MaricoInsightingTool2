@@ -4,13 +4,23 @@ import { checkEnvironmentVariables } from './envCheck';
 // Check environment variables on import
 checkEnvironmentVariables();
 
+// Detect current origin for dynamic configuration
+const getCurrentOrigin = () => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return import.meta.env.VITE_AZURE_REDIRECT_URI || 'http://localhost:3000';
+};
+
+const currentOrigin = getCurrentOrigin();
+
 // MSAL configuration
 export const msalConfig: Configuration = {
   auth: {
     clientId: import.meta.env.VITE_AZURE_CLIENT_ID || '',
     authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || ''}`,
-    redirectUri: import.meta.env.VITE_AZURE_REDIRECT_URI || 'http://localhost:3000',
-    postLogoutRedirectUri: 'http://localhost:3000',
+    redirectUri: import.meta.env.VITE_AZURE_REDIRECT_URI || currentOrigin,
+    postLogoutRedirectUri: import.meta.env.VITE_AZURE_POST_LOGOUT_REDIRECT_URI || currentOrigin,
   },
   cache: {
     cacheLocation: 'sessionStorage', // This configures where your cache will be stored
