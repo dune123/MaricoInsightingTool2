@@ -1,5 +1,5 @@
 import { CosmosClient, Database, Container } from "@azure/cosmos";
-import { ChartSpec, Message, DataSummary } from "@shared/schema.js";
+import { ChartSpec, Message, DataSummary, Insight } from "@shared/schema.js";
 
 // CosmosDB configuration
 const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || "";
@@ -54,6 +54,7 @@ export interface ChatDocument {
   dataSummary: DataSummary; // Data summary from file upload
   messages: Message[]; // Chat messages with charts and insights
   charts: ChartSpec[]; // All charts generated for this chat
+  insights: Insight[]; // AI-generated insights from data analysis
   sessionId: string; // Original session ID
   // Enhanced analysis data storage
   rawData: Record<string, any>[]; // Complete raw data from uploaded file
@@ -87,7 +88,8 @@ export const createChatDocument = async (
     aiModelUsed: string;
     fileSize: number;
     analysisVersion: string;
-  }
+  },
+  insights: Insight[] = []
 ): Promise<ChatDocument> => {
   const timestamp = Date.now();
   const chatId = `${fileName.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}`;
@@ -102,6 +104,7 @@ export const createChatDocument = async (
     dataSummary,
     messages: [],
     charts: initialCharts,
+    insights: insights,
     sessionId,
     rawData,
     sampleRows,
@@ -152,7 +155,7 @@ export const updateChatDocument = async (chatDocument: ChatDocument): Promise<Ch
     chatDocument.lastUpdatedAt = Date.now();
     const { resource } = await container.items.upsert(chatDocument);
     console.log(`✅ Updated chat document: ${chatDocument.id}`);
-    return resource as ChatDocument;
+    return resource as unknown as ChatDocument;
   } catch (error) {
     console.error("❌ Failed to update chat document:", error);
     throw error;
@@ -208,8 +211,8 @@ export const getUserChats = async (username: string): Promise<ChatDocument[]> =>
   }
 };
 
-// Get chat by session ID
-export const getChatBySessionId = async (sessionId: string): Promise<ChatDocument | null> => {
+// Get chat by session ID (more efficient)
+export const getChatBySessionIdEfficient = async (sessionId: string): Promise<ChatDocument | null> => {
   try {
     const query = "SELECT * FROM c WHERE c.sessionId = @sessionId";
     const { resources } = await container.items.query({
@@ -280,4 +283,187 @@ export const generateColumnStatistics = (data: Record<string, any>[], numericCol
   }
   
   return stats;
+};
+
+// Get all sessions from CosmosDB container (optionally filtered by username)
+export const getAllSessions = async (username?: string): Promise<ChatDocument[]> => {
+  try {
+    let query = "SELECT * FROM c";
+    const parameters: Array<{ name: string; value: any }> = [];
+    
+    // Add username filter if provided
+    if (username) {
+      query += " WHERE c.username = @username";
+      parameters.push({ name: "@username", value: username });
+    }
+    
+    query += " ORDER BY c.createdAt DESC";
+    
+    const queryOptions = parameters.length > 0 ? { parameters } : {};
+    const { resources } = await container.items.query({
+      query,
+      ...queryOptions,
+    }).fetchAll();
+    
+    console.log(`✅ Retrieved ${resources.length} sessions from CosmosDB${username ? ` for user: ${username}` : ''}`);
+    return resources;
+  } catch (error) {
+    console.error("❌ Failed to get all sessions:", error);
+    throw error;
+  }
+};
+
+// Get all sessions with pagination (optionally filtered by username)
+export const getAllSessionsPaginated = async (
+  pageSize: number = 10,
+  continuationToken?: string,
+  username?: string
+): Promise<{
+  sessions: ChatDocument[];
+  continuationToken?: string;
+  hasMoreResults: boolean;
+}> => {
+  try {
+    let query = "SELECT * FROM c";
+    const parameters: Array<{ name: string; value: any }> = [];
+    
+    // Add username filter if provided
+    if (username) {
+      query += " WHERE c.username = @username";
+      parameters.push({ name: "@username", value: username });
+    }
+    
+    query += " ORDER BY c.createdAt DESC";
+    
+    const queryOptions = {
+      maxItemCount: pageSize,
+      continuationToken,
+      ...(parameters.length > 0 && { parameters }),
+    };
+    
+    const { resources, continuationToken: nextToken, hasMoreResults } = await container.items.query({
+      query,
+    }, queryOptions).fetchNext();
+    
+    console.log(`✅ Retrieved ${resources.length} sessions (page size: ${pageSize})${username ? ` for user: ${username}` : ''}`);
+    
+    return {
+      sessions: resources,
+      continuationToken: nextToken,
+      hasMoreResults: hasMoreResults || false,
+    };
+  } catch (error) {
+    console.error("❌ Failed to get paginated sessions:", error);
+    throw error;
+  }
+};
+
+// Get sessions with filtering options
+export const getSessionsWithFilters = async (options: {
+  username?: string;
+  fileName?: string;
+  dateFrom?: number;
+  dateTo?: number;
+  limit?: number;
+  orderBy?: 'createdAt' | 'lastUpdatedAt' | 'uploadedAt';
+  orderDirection?: 'ASC' | 'DESC';
+}): Promise<ChatDocument[]> => {
+  try {
+    let query = "SELECT * FROM c WHERE 1=1";
+    const parameters: Array<{ name: string; value: any }> = [];
+    
+    // Add filters based on options
+    if (options.username) {
+      query += " AND c.username = @username";
+      parameters.push({ name: "@username", value: options.username });
+    }
+    
+    if (options.fileName) {
+      query += " AND CONTAINS(c.fileName, @fileName)";
+      parameters.push({ name: "@fileName", value: options.fileName });
+    }
+    
+    if (options.dateFrom) {
+      query += " AND c.createdAt >= @dateFrom";
+      parameters.push({ name: "@dateFrom", value: options.dateFrom });
+    }
+    
+    if (options.dateTo) {
+      query += " AND c.createdAt <= @dateTo";
+      parameters.push({ name: "@dateTo", value: options.dateTo });
+    }
+    
+    // Add ordering
+    const orderBy = options.orderBy || 'createdAt';
+    const orderDirection = options.orderDirection || 'DESC';
+    query += ` ORDER BY c.${orderBy} ${orderDirection}`;
+    
+    // Add limit if specified
+    if (options.limit) {
+      query += ` OFFSET 0 LIMIT ${options.limit}`;
+    }
+    
+    const queryOptions = options.limit ? { maxItemCount: options.limit } : {};
+    
+    const { resources } = await container.items.query({
+      query,
+      parameters,
+    }, queryOptions).fetchAll();
+    
+    console.log(`✅ Retrieved ${resources.length} sessions with filters`);
+    return resources;
+  } catch (error) {
+    console.error("❌ Failed to get filtered sessions:", error);
+    throw error;
+  }
+};
+
+// Get session statistics
+export const getSessionStatistics = async (): Promise<{
+  totalSessions: number;
+  totalUsers: number;
+  totalMessages: number;
+  totalCharts: number;
+  sessionsByUser: Record<string, number>;
+  sessionsByDate: Record<string, number>;
+}> => {
+  try {
+    // Get all sessions
+    const allSessions = await getAllSessions();
+    
+    // Calculate statistics
+    const totalSessions = allSessions.length;
+    const uniqueUsers = new Set(allSessions.map(s => s.username));
+    const totalUsers = uniqueUsers.size;
+    
+    const totalMessages = allSessions.reduce((sum, session) => sum + session.messages.length, 0);
+    const totalCharts = allSessions.reduce((sum, session) => sum + session.charts.length, 0);
+    
+    // Sessions by user
+    const sessionsByUser: Record<string, number> = {};
+    allSessions.forEach(session => {
+      sessionsByUser[session.username] = (sessionsByUser[session.username] || 0) + 1;
+    });
+    
+    // Sessions by date (grouped by day)
+    const sessionsByDate: Record<string, number> = {};
+    allSessions.forEach(session => {
+      const date = new Date(session.createdAt).toISOString().split('T')[0];
+      sessionsByDate[date] = (sessionsByDate[date] || 0) + 1;
+    });
+    
+    console.log(`✅ Generated session statistics: ${totalSessions} sessions, ${totalUsers} users`);
+    
+    return {
+      totalSessions,
+      totalUsers,
+      totalMessages,
+      totalCharts,
+      sessionsByUser,
+      sessionsByDate,
+    };
+  } catch (error) {
+    console.error("❌ Failed to get session statistics:", error);
+    throw error;
+  }
 };

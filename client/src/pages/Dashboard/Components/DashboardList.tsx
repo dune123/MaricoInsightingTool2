@@ -13,7 +13,7 @@ interface DashboardListProps {
 export function DashboardList({ dashboards, onViewDashboard, onDeleteDashboard }: DashboardListProps) {
   if (dashboards.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center py-12">
+      <div className="h-[calc(100vh-10vh)] flex flex-col items-center justify-center text-center py-12">
         <div className="rounded-full bg-muted p-6 mb-4">
           <BarChart3 className="h-12 w-12 text-muted-foreground" />
         </div>
@@ -30,15 +30,16 @@ export function DashboardList({ dashboards, onViewDashboard, onDeleteDashboard }
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground mb-2">Your Dashboards</h1>
-        <p className="text-muted-foreground">
-          Manage and view your saved dashboards
-        </p>
-      </div>
+    <div className="h-[calc(100vh-10vh)] overflow-y-auto">
+      <div className="p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground mb-2">Your Dashboards</h1>
+          <p className="text-muted-foreground">
+            Manage and view your saved dashboards
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {dashboards.map((dashboard) => (
           <Card key={dashboard.id} className="hover:shadow-none transition-shadow border-0">
             <CardHeader className="pb-3">
@@ -90,6 +91,7 @@ export function DashboardList({ dashboards, onViewDashboard, onDeleteDashboard }
             </CardContent>
           </Card>
         ))}
+        </div>
       </div>
     </div>
   );

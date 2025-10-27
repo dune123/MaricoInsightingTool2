@@ -22,6 +22,7 @@ type PageType = 'home' | 'dashboard' | 'analysis';
 function Router() {
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [loadedSessionData, setLoadedSessionData] = useState<any>(null);
 
   const handleNavigate = (page: PageType) => {
     setCurrentPage(page);
@@ -29,24 +30,32 @@ function Router() {
 
   const handleNewChat = () => {
     setCurrentPage('home');
+    setLoadedSessionData(null); // Clear any loaded session data
   };
 
   const handleUploadNew = () => {
     setCurrentPage('home');
     setResetTrigger(prev => prev + 1); // Trigger reset only for new uploads
+    setLoadedSessionData(null); // Clear any loaded session data
+  };
+
+  const handleLoadSession = (sessionId: string, sessionData: any) => {
+    console.log('🔄 Loading session in App:', sessionId, sessionData);
+    setLoadedSessionData(sessionData);
+    setCurrentPage('home'); // Navigate to home page with loaded session
   };
 
   const renderPage = () => {
     return (
       <>
         <div className={currentPage === 'home' ? 'block' : 'hidden'}>
-          <Home resetTrigger={resetTrigger} />
+          <Home resetTrigger={resetTrigger} loadedSessionData={loadedSessionData} />
         </div>
         <div className={currentPage === 'dashboard' ? 'block' : 'hidden'}>
           <Dashboard />
         </div>
         <div className={currentPage === 'analysis' ? 'block' : 'hidden'}>
-          <Analysis />
+          <Analysis onNavigate={handleNavigate} onNewChat={handleNewChat} onLoadSession={handleLoadSession} />
         </div>
       </>
     );

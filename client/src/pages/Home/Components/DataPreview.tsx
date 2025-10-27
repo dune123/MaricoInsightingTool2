@@ -59,14 +59,14 @@ export function DataPreview({
         </Button>
 
         {isExpanded && (
-          <div className="h-80 overflow-auto" data-testid="preview-table-scroll">
+          <div className="h-80 overflow-auto relative" data-testid="preview-table-scroll">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
+              <thead className="sticky top-0 z-20">
+                <tr className="border-b bg-gray-100 shadow-sm">
                   {columns.map((col, idx) => (
                     <th
                       key={idx}
-                      className="px-4 py-2 text-left font-medium text-muted-foreground whitespace-nowrap sticky top-0 bg-muted/50 z-10"
+                      className="px-4 py-2 text-left font-medium text-gray-700 whitespace-nowrap bg-gray-100"
                       data-testid={`header-${col}`}
                     >
                       {col}
@@ -78,20 +78,34 @@ export function DataPreview({
                 {data.map((row, rowIdx) => (
                   <tr
                     key={rowIdx}
-                    className="border-b last:border-b-0 hover-elevate"
+                    className="border-b last:border-b-0 hover:bg-gray-50"
                     data-testid={`row-${rowIdx}`}
                   >
-                    {columns.map((col, colIdx) => (
-                      <td
-                        key={colIdx}
-                        className="px-4 py-2 whitespace-nowrap"
-                        data-testid={`cell-${rowIdx}-${col}`}
-                      >
-                        {row[col] === null || row[col] === undefined
-                          ? '—'
-                          : String(row[col])}
-                      </td>
-                    ))}
+                    {columns.map((col, colIdx) => {
+                      const value = row[col];
+                      let displayValue = value;
+                      
+                      // Format decimal numbers to 2 decimal places
+                      if (value !== null && value !== undefined) {
+                        if (typeof value === 'number' && !Number.isInteger(value)) {
+                          displayValue = value.toFixed(2);
+                        } else {
+                          displayValue = String(value);
+                        }
+                      } else {
+                        displayValue = '—';
+                      }
+                      
+                      return (
+                        <td
+                          key={colIdx}
+                          className="px-4 py-2 whitespace-nowrap"
+                          data-testid={`cell-${rowIdx}-${col}`}
+                        >
+                          {displayValue}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

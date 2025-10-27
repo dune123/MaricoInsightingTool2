@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { 
   getUserChats, 
   getChatDocument, 
-  getChatBySessionId,
+  getChatBySessionIdEfficient,
   ChatDocument 
 } from "../lib/cosmosDB.js";
 
@@ -92,7 +92,7 @@ export const getAnalysisDataBySession = async (req: Request, res: Response) => {
   try {
     const { sessionId } = req.params;
     
-    const chatDocument = await getChatBySessionId(sessionId);
+    const chatDocument = await getChatBySessionIdEfficient(sessionId);
     
     if (!chatDocument) {
       return res.status(404).json({ error: 'Analysis data not found for this session' });

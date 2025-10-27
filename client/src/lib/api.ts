@@ -188,4 +188,45 @@ export const dataApi = {
     api.get<RawDataResponse>(`/data/chat/${chatId}/raw-data?username=${username}&page=${page}&limit=${limit}`),
 };
 
+// Sessions API functions
+export const sessionsApi = {
+  // Get all sessions for the current user
+  getAllSessions: () => api.get('/api/sessions'),
+  
+  // Get sessions with pagination
+  getSessionsPaginated: (pageSize: number = 10, continuationToken?: string) => {
+    const params = new URLSearchParams({ pageSize: pageSize.toString() });
+    if (continuationToken) {
+      params.append('continuationToken', continuationToken);
+    }
+    return api.get(`/sessions/paginated?${params}`);
+  },
+  
+  // Get sessions with filters
+  getSessionsFiltered: (filters: {
+    startDate?: string;
+    endDate?: string;
+    fileName?: string;
+    minMessageCount?: number;
+    maxMessageCount?: number;
+  }) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, value.toString());
+      }
+    });
+    return api.get(`/api/sessions/filtered?${params}`);
+  },
+  
+  // Get session statistics
+  getSessionStatistics: () => api.get('/api/sessions/statistics'),
+  
+  // Get detailed session by session ID
+  getSessionDetails: (sessionId: string) => api.get(`/api/sessions/details/${sessionId}`),
+  
+  // Get sessions by specific user
+  getSessionsByUser: (username: string) => api.get(`/api/sessions/user/${username}`),
+};
+
 export default apiClient;

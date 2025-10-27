@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
 import { answerQuestion } from "../lib/dataAnalyzer.js";
-import { storage } from "../storage.js";
 import { chatResponseSchema } from "@shared/schema.js";
-import { getChatBySessionId, addMessageToChat } from "../lib/cosmosDB.js";
+import { getChatBySessionIdEfficient, addMessageToChat } from "../lib/cosmosDB.js";
 
 export const chatWithAI = async (req: Request, res: Response) => {
   try {
@@ -13,19 +12,19 @@ export const chatWithAI = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Get session data
-    const session = storage.getSession(sessionId);
+    // Get chat document from CosmosDB by session ID
+    const chatDocument = await getChatBySessionIdEfficient(sessionId);
 
-    if (!session) {
+    if (!chatDocument) {
       return res.status(404).json({ error: 'Session not found. Please upload a file first.' });
     }
 
-    // Answer the question
+    // Answer the question using data from CosmosDB
     const result = await answerQuestion(
-      session.data,
+      chatDocument.rawData, // Use the actual data stored in CosmosDB
       message,
       chatHistory || [],
-      session.summary
+      chatDocument.dataSummary
     );
 
     // Validate response
@@ -33,30 +32,23 @@ export const chatWithAI = async (req: Request, res: Response) => {
 
     // Save messages to CosmosDB
     try {
-      // Get chat document by session ID
-      const chatDocument = await getChatBySessionId(sessionId);
-      
-      if (chatDocument) {
-        // Add user message
-        await addMessageToChat(chatDocument.id, username, {
-          role: 'user',
-          content: message,
-          timestamp: Date.now(),
-        });
+      // Add user message
+      await addMessageToChat(chatDocument.id, username, {
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+      });
 
-        // Add assistant response
-        await addMessageToChat(chatDocument.id, username, {
-          role: 'assistant',
-          content: validated.answer,
-          charts: validated.charts,
-          insights: validated.insights,
-          timestamp: Date.now(),
-        });
+      // Add assistant response
+      await addMessageToChat(chatDocument.id, username, {
+        role: 'assistant',
+        content: validated.answer,
+        charts: validated.charts,
+        insights: validated.insights,
+        timestamp: Date.now(),
+      });
 
-        console.log(`✅ Messages saved to chat: ${chatDocument.id}`);
-      } else {
-        console.log("⚠️ Chat document not found for session:", sessionId);
-      }
+      console.log(`✅ Messages saved to chat: ${chatDocument.id}`);
     } catch (cosmosError) {
       console.error("⚠️ Failed to save messages to CosmosDB:", cosmosError);
       // Continue without failing the chat - CosmosDB is optional

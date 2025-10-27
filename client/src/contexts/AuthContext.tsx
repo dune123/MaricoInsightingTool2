@@ -32,9 +32,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAuthenticated = !!user;
 
+  // Debug: Log authentication state changes
+  useEffect(() => {
+    console.log('🔐 Auth state changed:', {
+      accountsCount: accounts.length,
+      user: user?.username,
+      isAuthenticated,
+      inProgress
+    });
+  }, [accounts.length, user?.username, isAuthenticated, inProgress]);
+
   useEffect(() => {
     if (accounts.length > 0) {
-      setUser(accounts[0]);
+      const userAccount = accounts[0];
+      setUser(userAccount);
+      
+      // Store user email in localStorage when user is authenticated
+      if (userAccount.username) {
+        setUserEmail(userAccount.username);
+        console.log('✅ User email stored in localStorage:', userAccount.username);
+      }
+      
       setIsLoading(false);
     } else if (inProgress === 'none') {
       setIsLoading(false);

@@ -211,3 +211,4 @@ Enable detailed logging by checking the server console output:
 - **CDN Integration**: Use Azure CDN for faster file access
 - **Batch Operations**: Support for bulk file operations
 - **File Sharing**: Direct sharing capabilities between users
+

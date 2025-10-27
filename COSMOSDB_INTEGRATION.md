@@ -157,3 +157,4 @@ const { chats } = await response.json();
 - Success and error messages are clearly indicated
 - Performance metrics can be monitored through Azure portal
 - Application continues to work even if CosmosDB is unavailable
+

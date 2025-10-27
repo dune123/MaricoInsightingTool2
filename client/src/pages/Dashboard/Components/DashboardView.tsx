@@ -13,8 +13,9 @@ interface DashboardViewProps {
 export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardViewProps) {
   if (dashboard.charts.length === 0) {
     return (
-      <div className="p-6 h-[80vh] overflow-y-auto bg-white">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="h-[calc(100vh-10vh)] overflow-y-auto bg-white">
+        <div className="p-6">
+          <div className="flex items-center gap-4 mb-6">
           <Button variant="outline" size="icon" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -38,13 +39,15 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
             Back to Dashboards
           </Button>
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-white">
-      <div className="flex items-center gap-4 mb-6">
+    <div className="h-[calc(100vh-10vh)] overflow-y-auto bg-white">
+      <div className="p-6">
+        <div className="flex items-center gap-4 mb-6">
         <Button variant="outline" size="icon" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -90,6 +93,7 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
             </Button>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

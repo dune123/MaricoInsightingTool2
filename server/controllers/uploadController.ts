@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import { parseFile, createDataSummary } from "../lib/fileParser.js";
 import { analyzeUpload } from "../lib/dataAnalyzer.js";
-import { storage } from "../storage.js";
 import { uploadResponseSchema } from "@shared/schema.js";
 import { createChatDocument, generateColumnStatistics } from "../lib/cosmosDB.js";
 import { uploadFileToBlob } from "../lib/blobStorage.js";
@@ -79,13 +78,8 @@ export const uploadFile = async (
       };
     });
 
-    // Store session
-    const sessionId = storage.createSession({
-      data,
-      summary,
-      fileName: req.file.originalname,
-      uploadedAt: Date.now(),
-    });
+    // Generate a unique session ID for this upload
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Generate column statistics for numeric columns
     const columnStatistics = generateColumnStatistics(data, summary.numericColumns);
@@ -128,7 +122,8 @@ export const uploadFile = async (
           aiModelUsed: 'gpt-4o',
           fileSize: req.file.size,
           analysisVersion: '1.0.0'
-        } // Analysis metadata
+        }, // Analysis metadata
+        insights // AI-generated insights
       );
     } catch (cosmosError) {
       console.error("Failed to create chat document in CosmosDB:", cosmosError);
