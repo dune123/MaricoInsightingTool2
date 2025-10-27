@@ -19,6 +19,7 @@ const getAllowedOrigins = () => {
     // Add common production domains
     origins.push('https://marico-insight.vercel.app');
     origins.push('https://marico-insighting-tool2.vercel.app');
+    origins.push('https://marico-insighting-tool2-fdll.vercel.app');
     origins.push('https://marico-insight.netlify.app');
     origins.push('https://vocal-toffee-30f0ce.netlify.app');
   }
