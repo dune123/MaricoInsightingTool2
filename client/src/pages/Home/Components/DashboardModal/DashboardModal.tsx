@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, BarChart3, X, Clock } from 'lucide-react';
+import { Plus, BarChart3, X, Clock, ArrowLeft } from 'lucide-react';
 import { ChartSpec } from '@shared/schema';
 import { useDashboardContext } from '@/pages/Dashboard/context/DashboardContext';
 
@@ -15,6 +15,7 @@ interface DashboardModalProps {
 }
 
 export function DashboardModal({ isOpen, onClose, chart }: DashboardModalProps) {
+  const [step, setStep] = useState<'select' | 'confirm'>('select');
   const [newDashboardName, setNewDashboardName] = useState('');
   const [selectedDashboard, setSelectedDashboard] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,6 +33,22 @@ export function DashboardModal({ isOpen, onClose, chart }: DashboardModalProps) 
   const recentDashboards = dashboards
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
+
+  // Reset modal state when opening/closing
+  const resetModal = () => {
+    setStep('select');
+    setNewDashboardName('');
+    setSelectedDashboard('');
+    setSearchQuery('');
+    setShowDropdown(false);
+  };
+
+  // Reset when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      resetModal();
+    }
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -73,133 +90,181 @@ export function DashboardModal({ isOpen, onClose, chart }: DashboardModalProps) 
             </CardContent>
           </Card>
 
-          {/* Search and Select Dashboard */}
-          {dashboards.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Search Dashboard</Label>
-              <div className="relative" ref={dropdownRef}>
-                <Input
-                  placeholder="Search dashboards..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setShowDropdown(true);
-                    setSelectedDashboard('');
-                  }}
-                  onFocus={() => setShowDropdown(true)}
-                  className="w-full"
-                />
-                
-                {showDropdown && searchQuery && (
-                  <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border-0 rounded-md shadow-none max-h-48 overflow-y-auto">
-                    {filteredDashboards.length > 0 ? (
-                      filteredDashboards.map((dashboard) => (
-                        <button
-                          key={dashboard.id}
-                          className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
-                          onClick={() => {
-                            setSelectedDashboard(dashboard.id);
-                            setSearchQuery(dashboard.name);
-                            setShowDropdown(false);
-                            setNewDashboardName('');
-                          }}
-                        >
-                          <BarChart3 className="h-4 w-4" />
-                          <span className="flex-1">{dashboard.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {dashboard.charts.length} charts
-                          </span>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">
-                        No dashboards found
+          {step === 'select' ? (
+            <>
+              {/* Dashboard Selection View */}
+              {dashboards.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Search Dashboard</Label>
+                  <div className="relative" ref={dropdownRef}>
+                    <Input
+                      placeholder="Search dashboards..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setShowDropdown(true);
+                        setSelectedDashboard('');
+                      }}
+                      onFocus={() => setShowDropdown(true)}
+                      className="w-full"
+                    />
+                    
+                    {showDropdown && searchQuery && (
+                      <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border-0 rounded-md shadow-none max-h-48 overflow-y-auto">
+                        {filteredDashboards.length > 0 ? (
+                          filteredDashboards.map((dashboard) => (
+                            <button
+                              key={dashboard.id}
+                              className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
+                              onClick={() => {
+                                setSelectedDashboard(dashboard.id);
+                                setSearchQuery(dashboard.name);
+                                setShowDropdown(false);
+                                setNewDashboardName('');
+                                setStep('confirm');
+                              }}
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                              <span className="flex-1">{dashboard.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {dashboard.charts.length} charts
+                              </span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            No dashboards found
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
+                </div>
+              )}
 
-          {/* Recently Created Dashboards */}
-          {recentDashboards.length > 0 && !searchQuery && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Recently Created Dashboards
-              </Label>
-              <div className="space-y-1">
-                {recentDashboards.map((dashboard) => (
-                  <button
-                    key={dashboard.id}
-                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 rounded-md border flex items-center gap-3 transition-colors ${
-                      selectedDashboard === dashboard.id 
-                        ? 'border-primary bg-primary/5' 
-                        : 'border-gray-200'
-                    }`}
-                    onClick={() => {
-                      setSelectedDashboard(dashboard.id);
-                      setSearchQuery(dashboard.name);
-                      setNewDashboardName('');
-                    }}
-                  >
+              {/* Recently Created Dashboards */}
+              {recentDashboards.length > 0 && !searchQuery && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Recently Created Dashboards
+                  </Label>
+                  <div className="space-y-1">
+                    {recentDashboards.map((dashboard) => (
+                      <button
+                        key={dashboard.id}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-50 rounded-md border flex items-center gap-3 transition-colors border-gray-200"
+                        onClick={() => {
+                          setSelectedDashboard(dashboard.id);
+                          setSearchQuery(dashboard.name);
+                          setNewDashboardName('');
+                          setStep('confirm');
+                        }}
+                      >
+                        <div className="p-1.5 bg-primary/10 rounded-md">
+                          <BarChart3 className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{dashboard.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {dashboard.charts.length} charts • Created {new Date(dashboard.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Create New Dashboard */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Create New Dashboard</Label>
+                <Input
+                  placeholder="Enter dashboard name..."
+                  value={newDashboardName}
+                  onChange={(e) => setNewDashboardName(e.target.value)}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-4">
+                <Button
+                  onClick={() => {
+                    if (newDashboardName.trim()) {
+                      setStep('confirm');
+                    }
+                  }}
+                  disabled={!newDashboardName.trim()}
+                  className="flex-1"
+                >
+                  Create New Dashboard
+                </Button>
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Confirmation View */}
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-sm mb-2">Selected Dashboard:</h4>
+                  <div className="flex items-center gap-3">
                     <div className="p-1.5 bg-primary/10 rounded-md">
                       <BarChart3 className="h-4 w-4 text-primary" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{dashboard.name}</div>
+                    <div>
+                      <div className="font-medium text-sm">
+                        {selectedDashboard ? 
+                          dashboards.find(d => d.id === selectedDashboard)?.name : 
+                          newDashboardName
+                        }
+                      </div>
                       <div className="text-xs text-muted-foreground">
-                        {dashboard.charts.length} charts • Created {new Date(dashboard.createdAt).toLocaleDateString()}
+                        {selectedDashboard ? 
+                          `${dashboards.find(d => d.id === selectedDashboard)?.charts.length || 0} charts` : 
+                          'New dashboard'
+                        }
                       </div>
                     </div>
-                    {selectedDashboard === dashboard.id && (
-                      <div className="w-2 h-2 bg-primary rounded-full"></div>
-                    )}
-                  </button>
-                ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    onClick={() => {
+                      console.log('Button clicked:', { selectedDashboard, newDashboardName, chart });
+                      if (selectedDashboard) {
+                        // Add to existing dashboard
+                        console.log('Adding to existing dashboard:', selectedDashboard);
+                        addChartToDashboard(selectedDashboard, chart);
+                        onClose();
+                      } else if (newDashboardName.trim()) {
+                        // Create new dashboard and add chart
+                        console.log('Creating new dashboard:', newDashboardName.trim());
+                        const newDashboard = createDashboard(newDashboardName.trim());
+                        addChartToDashboard(newDashboard.id, chart);
+                        onClose();
+                      }
+                    }}
+                    className="flex-1"
+                  >
+                    {selectedDashboard ? 'Add to Dashboard' : 'Create New Dashboard'}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setStep('select')}
+                    className="flex items-center gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                </div>
               </div>
-            </div>
+            </>
           )}
-
-          {/* Create New Dashboard */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Create New Dashboard</Label>
-            <Input
-              placeholder="Enter dashboard name..."
-              value={newDashboardName}
-              onChange={(e) => setNewDashboardName(e.target.value)}
-            />
-          </div>
-
-
-          {/* Actions */}
-          <div className="flex gap-2 pt-4">
-            <Button
-              onClick={() => {
-                console.log('Button clicked:', { selectedDashboard, newDashboardName, chart });
-                if (selectedDashboard) {
-                  // Add to existing dashboard
-                  console.log('Adding to existing dashboard:', selectedDashboard);
-                  addChartToDashboard(selectedDashboard, chart);
-                  onClose();
-                } else if (newDashboardName.trim()) {
-                  // Create new dashboard and add chart
-                  console.log('Creating new dashboard:', newDashboardName.trim());
-                  const newDashboard = createDashboard(newDashboardName.trim());
-                  addChartToDashboard(newDashboard.id, chart);
-                  onClose();
-                }
-              }}
-              disabled={!selectedDashboard && !newDashboardName.trim()}
-              className="flex-1"
-            >
-              {selectedDashboard ? 'Add to Dashboard' : 'Create New Dashboard'}
-            </Button>
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -65,8 +65,8 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
     switch (type) {
       case 'line':
         return (
-          <ResponsiveContainer width="100%" height={600}>
-            <LineChart data={data} margin={{ left: 80, right: 20, top: 30, bottom: 50 }}>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -109,8 +109,8 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
 
       case 'bar':
         return (
-          <ResponsiveContainer width="100%" height={600}>
-            <BarChart data={data} margin={{ left: 80, right: 20, top: 30, bottom: 50 }}>
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -155,8 +155,8 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
         };
 
         return (
-          <ResponsiveContainer width="100%" height={600}>
-            <ScatterChart margin={{ left: 80, right: 20, top: 20, bottom: 40 }}>
+          <ResponsiveContainer width="100%" height={400}>
+            <ScatterChart margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -198,7 +198,7 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
 
       case 'pie':
         return (
-          <ResponsiveContainer width="100%" height={600}>
+          <ResponsiveContainer width="100%" height={400}>
             <PieChart>
               <Pie
                 data={data}
@@ -206,8 +206,8 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 nameKey={x}
                 cx="50%"
                 cy="50%"
-                innerRadius={80}
-                outerRadius={150}
+                innerRadius={60}
+                outerRadius={120}
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 labelLine={{ stroke: 'hsl(var(--foreground))' }}
               >
@@ -231,8 +231,8 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
 
       case 'area':
         return (
-          <ResponsiveContainer width="100%" height={600}>
-            <AreaChart data={data} margin={{ left: 80, right: 20, top: 30, bottom: 50 }}>
+          <ResponsiveContainer width="100%" height={400}>
+            <AreaChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -280,7 +280,7 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-hidden [&>button]:hidden">
+      <DialogContent className="max-w-7xl w-full max-h-[90vh] overflow-hidden [&>button]:hidden">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <DialogTitle className="text-xl">
             {title}
@@ -296,8 +296,62 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
         </DialogHeader>
         
         <div className="flex-1 overflow-hidden">
-          <div className="h-[600px] w-full mb-4">
-            {renderChart()}
+          <div className="flex gap-6 h-[500px]">
+            {/* Left side - Chart */}
+            <div className="flex-1 min-w-0">
+              <div className="h-full w-full">
+                {renderChart()}
+              </div>
+            </div>
+            
+            {/* Right side - Insights and Recommendations */}
+            <div className="w-80 flex-shrink-0 overflow-y-auto">
+              <div className="space-y-4">
+                {/* Key Insight */}
+                {chart.keyInsight && (
+                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-start gap-3">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full mt-1 flex-shrink-0"></div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">Key Insight</h3>
+                          <div 
+                            className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400"
+                            onWheel={(e) => {
+                              e.stopPropagation();
+                              const element = e.currentTarget;
+                              element.scrollTop += e.deltaY;
+                            }}
+                          >
+                            <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed pr-2">{chart.keyInsight}</p>
+                          </div>
+                        </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Recommendation */}
+                {chart.recommendation && (
+                  <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                    <div className="flex items-start gap-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full mt-1 flex-shrink-0"></div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">Recommendation</h3>
+                          <div 
+                            className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400"
+                            onWheel={(e) => {
+                              e.stopPropagation();
+                              const element = e.currentTarget;
+                              element.scrollTop += e.deltaY;
+                            }}
+                          >
+                            <p className="text-sm text-green-800 dark:text-green-200 leading-relaxed pr-2">{chart.recommendation}</p>
+                          </div>
+                        </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </DialogContent>

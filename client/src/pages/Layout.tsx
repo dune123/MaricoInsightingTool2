@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   MessageSquare, 
   BarChart3, 
   TrendingUp, 
   Menu,
   X,
-  Upload
+  Upload,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import LogoutButton from '@/components/LogoutButton';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,6 +25,7 @@ interface LayoutProps {
 
 export function Layout({ children, currentPage, onNavigate, onNewChat, onUploadNew }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { user } = useAuth();
 
   const navigationItems = [
     {
@@ -47,7 +52,7 @@ export function Layout({ children, currentPage, onNavigate, onNewChat, onUploadN
     <div className="flex h-screen bg-white">
       {/* Sidebar */}
       <div className={cn(
-        "transition-all duration-300 flex-shrink-0 min-w-16 z-10 p-0 outline-none border-0",
+        "transition-all duration-300 flex-shrink-0 min-w-16 z-10 p-0 outline-none border-0 flex flex-col",
         sidebarOpen ? "w-64 bg-gray-50" : "w-16 bg-white"
       )}>
         {/* Header */}
@@ -68,7 +73,7 @@ export function Layout({ children, currentPage, onNavigate, onNewChat, onUploadN
         </div>
 
         {/* Navigation */}
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-2 flex-1">
           {/* Navigation Items */}
           <div className="space-y-1">
             {navigationItems.map((item) => {
@@ -97,15 +102,34 @@ export function Layout({ children, currentPage, onNavigate, onNewChat, onUploadN
             })}
           </div>
         </div>
+
+        {/* User Profile Section - Bottom of Sidebar */}
+        {sidebarOpen && (
+          <div className="p-4 border-t border-gray-200 bg-white">
+            <div className="flex items-center gap-3 mb-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={user?.idTokenClaims?.picture as string} alt={user?.name || 'User'} />
+                <AvatarFallback>
+                  <User className="h-5 w-5" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name || 'User'}</p>
+                <p className="text-xs text-gray-500 truncate">{user?.username || ''}</p>
+              </div>
+            </div>
+            <LogoutButton />
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="bg-white px-6 py-3 outline-none">
+        <div className="bg-white px-6 py-3 outline-none border-b">
           <div className="flex items-center justify-between">
             <h1>Marico Insighting</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {onUploadNew && (
                 <Button
                   onClick={onUploadNew}

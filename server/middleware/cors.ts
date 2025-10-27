@@ -19,6 +19,8 @@ const getAllowedOrigins = () => {
     // Add common production domains
     origins.push('https://marico-insight.vercel.app');
     origins.push('https://marico-insighting-tool2.vercel.app');
+    origins.push('https://marico-insighting-tool2-fdll.vercel.app');
+    origins.push('https://marico-insighting-tool2-git-dev-sameers-projects-c785670d.vercel.app');
     origins.push('https://marico-insight.netlify.app');
     origins.push('https://vocal-toffee-30f0ce.netlify.app');
   }
@@ -30,6 +32,9 @@ export const corsConfig = cors({
   origin: (origin, callback) => {
     const allowedOrigins = getAllowedOrigins();
     
+    console.log('CORS Origin check:', origin);
+    console.log('Allowed origins:', allowedOrigins);
+    
     // Allow requests with no origin (like mobile apps, curl, or some browsers)
     if (!origin) {
       console.log('Request with no origin - allowing');
@@ -38,6 +43,7 @@ export const corsConfig = cors({
     
     // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
+      console.log('Origin allowed:', origin);
       return callback(null, true);
     }
     
@@ -72,7 +78,11 @@ export const corsConfig = cors({
     'Accept',
     'Origin',
     'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
+    'Access-Control-Request-Headers',
+    'X-User-Email',  // Allow custom user email header
+    'x-user-email',  // Allow lowercase version too
+    'X-User-Name',   // Allow custom user name header
+    'x-user-name'    // Allow lowercase version too
   ],
   exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
   optionsSuccessStatus: 200,

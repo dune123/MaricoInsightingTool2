@@ -1,4 +1,13 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { getUserEmail } from '@/utils/userStorage';
+import { 
+  UploadResponse, 
+  ChatResponse,
+  UserAnalysisSessionsResponse,
+  CompleteAnalysisData,
+  ColumnStatisticsResponse,
+  RawDataResponse
+} from '@shared/schema';
 
 // Base configuration for your backend
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
@@ -14,10 +23,19 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor for logging (optional)
+// Request interceptor for adding user email to headers
 apiClient.interceptors.request.use(
   (config) => {
     console.log(`Making ${config.method?.toUpperCase()} request to: ${config.url}`);
+    
+    // Add user email to headers if available
+    const userEmail = getUserEmail();
+    if (userEmail) {
+      config.headers = config.headers || {};
+      config.headers['X-User-Email'] = userEmail;
+      console.log(`Adding user email to headers: ${userEmail}`);
+    }
+    
     return config;
   },
   (error) => {
@@ -53,7 +71,7 @@ apiClient.interceptors.response.use(
     
     if (error.response) {
       // Server responded with error status
-      const message = error.response.data?.message || error.message || 'Request failed';
+      const message = (error.response.data as any)?.message || error.message || 'Request failed';
       throw new Error(`${error.response.status}: ${message}`);
     } else if (error.request) {
       // Request was made but no response received
@@ -126,16 +144,89 @@ export async function uploadFile<T = any>(
     });
   }
   
+  // Get user email for headers
+  const userEmail = getUserEmail();
+  const headers: Record<string, string> = {
+    'Content-Type': 'multipart/form-data',
+  };
+  
+  if (userEmail) {
+    headers['X-User-Email'] = userEmail;
+    console.log(`Adding user email to upload headers: ${userEmail}`);
+  }
+  
   return apiRequest<T>({
     method: 'POST',
     route,
     data: formData,
     config: {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers,
     },
   });
 }
+
+// Data retrieval API functions
+export const dataApi = {
+  // Get all analysis sessions for a user
+  getUserSessions: (username: string) =>
+    api.get<UserAnalysisSessionsResponse>(`/data/user/${username}/sessions`),
+  
+  // Get complete analysis data for a specific chat
+  getAnalysisData: (chatId: string, username: string) =>
+    api.get<CompleteAnalysisData>(`/data/chat/${chatId}?username=${username}`),
+  
+  // Get analysis data by session ID
+  getAnalysisDataBySession: (sessionId: string) =>
+    api.get<CompleteAnalysisData>(`/data/session/${sessionId}`),
+  
+  // Get column statistics for a specific analysis
+  getColumnStatistics: (chatId: string, username: string) =>
+    api.get<ColumnStatisticsResponse>(`/data/chat/${chatId}/statistics?username=${username}`),
+  
+  // Get raw data for a specific analysis (with pagination)
+  getRawData: (chatId: string, username: string, page = 1, limit = 100) =>
+    api.get<RawDataResponse>(`/data/chat/${chatId}/raw-data?username=${username}&page=${page}&limit=${limit}`),
+};
+
+// Sessions API functions
+export const sessionsApi = {
+  // Get all sessions for the current user
+  getAllSessions: () => api.get('/api/sessions'),
+  
+  // Get sessions with pagination
+  getSessionsPaginated: (pageSize: number = 10, continuationToken?: string) => {
+    const params = new URLSearchParams({ pageSize: pageSize.toString() });
+    if (continuationToken) {
+      params.append('continuationToken', continuationToken);
+    }
+    return api.get(`/sessions/paginated?${params}`);
+  },
+  
+  // Get sessions with filters
+  getSessionsFiltered: (filters: {
+    startDate?: string;
+    endDate?: string;
+    fileName?: string;
+    minMessageCount?: number;
+    maxMessageCount?: number;
+  }) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, value.toString());
+      }
+    });
+    return api.get(`/api/sessions/filtered?${params}`);
+  },
+  
+  // Get session statistics
+  getSessionStatistics: () => api.get('/api/sessions/statistics'),
+  
+  // Get detailed session by session ID
+  getSessionDetails: (sessionId: string) => api.get(`/api/sessions/details/${sessionId}`),
+  
+  // Get sessions by specific user
+  getSessionsByUser: (username: string) => api.get(`/api/sessions/user/${username}`),
+};
 
 export default apiClient;
