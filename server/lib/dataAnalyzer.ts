@@ -678,6 +678,12 @@ CHART GUIDELINES:
 - Scatter: Numeric for both x and y
 - x and y must be single column names (strings), NOT arrays
 
+CRITICAL FOR CORRELATION CHARTS:
+- If generating correlation charts, NEVER modify correlation values
+- Use EXACT correlation values as calculated (positive/negative)
+- Do NOT convert negative correlations to positive or vice versa
+- Correlation values must preserve their original sign
+
 Output JSON:
 {
   "answer": "your detailed answer",
@@ -690,7 +696,7 @@ Output JSON:
     messages: [
       {
         role: 'system',
-        content: 'You are a helpful data analyst assistant. Provide specific, accurate answers. Column names (x, y) must be strings, not arrays.',
+        content: 'You are a helpful data analyst assistant. Provide specific, accurate answers. Column names (x, y) must be strings, not arrays. CRITICAL: Never modify correlation values - preserve their original positive/negative signs.',
       },
       {
         role: 'user',
