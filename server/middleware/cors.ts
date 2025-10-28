@@ -21,6 +21,7 @@ const getAllowedOrigins = () => {
     origins.push('https://marico-insighting-tool2.vercel.app');
     origins.push('https://marico-insighting-tool2-fdll.vercel.app');
     origins.push('https://marico-insighting-tool2-git-dev-sameers-projects-c785670d.vercel.app');
+    origins.push('https://maricoinsightingtool2.onrender.com');
     origins.push('https://marico-insight.netlify.app');
     origins.push('https://vocal-toffee-30f0ce.netlify.app');
   }
@@ -82,7 +83,9 @@ export const corsConfig = cors({
     'X-User-Email',  // Allow custom user email header
     'x-user-email',  // Allow lowercase version too
     'X-User-Name',   // Allow custom user name header
-    'x-user-name'    // Allow lowercase version too
+    'x-user-name',   // Allow lowercase version too
+    'X-USER-EMAIL',  // Allow uppercase version
+    'X-USER-NAME'    // Allow uppercase version
   ],
   exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
   optionsSuccessStatus: 200,
