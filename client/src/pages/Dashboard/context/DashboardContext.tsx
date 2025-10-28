@@ -8,6 +8,7 @@ interface DashboardContextType {
   createDashboard: (name: string) => DashboardData;
   addChartToDashboard: (dashboardId: string, chart: any) => void;
   removeChartFromDashboard: (dashboardId: string, chartIndex: number) => void;
+  reorderChartsInDashboard: (dashboardId: string, fromIndex: number, toIndex: number) => void;
   deleteDashboard: (dashboardId: string) => void;
   getDashboardById: (dashboardId: string) => DashboardData | undefined;
 }

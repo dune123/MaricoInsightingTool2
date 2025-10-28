@@ -10,7 +10,8 @@ export default function Dashboard() {
     currentDashboard, 
     setCurrentDashboard, 
     deleteDashboard,
-    removeChartFromDashboard 
+    removeChartFromDashboard,
+    reorderChartsInDashboard 
   } = useDashboardContext();
 
   const handleViewDashboard = (dashboard: DashboardData) => {
@@ -45,12 +46,32 @@ export default function Dashboard() {
     }
   };
 
+  const handleReorderCharts = (fromIndex: number, toIndex: number) => {
+    if (currentDashboard) {
+      reorderChartsInDashboard(currentDashboard.id, fromIndex, toIndex);
+      
+      // Update the currentDashboard to reflect the changes
+      const updatedDashboard = {
+        ...currentDashboard,
+        charts: (() => {
+          const newCharts = [...currentDashboard.charts];
+          const [movedChart] = newCharts.splice(fromIndex, 1);
+          newCharts.splice(toIndex, 0, movedChart);
+          return newCharts;
+        })(),
+        updatedAt: new Date()
+      };
+      setCurrentDashboard(updatedDashboard);
+    }
+  };
+
   if (currentDashboard) {
     return (
       <DashboardView
         dashboard={currentDashboard}
         onBack={handleBackToList}
         onDeleteChart={handleDeleteChart}
+        onReorderCharts={handleReorderCharts}
       />
     );
   }

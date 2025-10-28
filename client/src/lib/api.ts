@@ -17,7 +17,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ||
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000, // 30 seconds timeout
-  withCredentials: true,
+  withCredentials: false,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -49,14 +49,17 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    // Handle CORS and network errors with retry logic
-    if (error.code === 'ERR_NETWORK' || 
-        error.message.includes('CORS') || 
-        error.message.includes('Network Error') ||
-        error.message.includes('Failed to fetch')) {
-      
+    // Respect single-attempt header to avoid any retries for this request
+    const singleAttempt = (error.config as any)?.headers?.['X-Single-Attempt'] === 'true';
+
+    // Handle CORS and network errors with retry logic (skip when singleAttempt is true)
+    if (!singleAttempt && (
+      error.code === 'ERR_NETWORK' || 
+      error.message.includes('CORS') || 
+      error.message.includes('Network Error') ||
+      error.message.includes('Failed to fetch')
+    )) {
       console.log('CORS/Network error detected, retrying once...');
-      
       // Retry once for CORS/network errors
       try {
         if (error.config) {
@@ -70,9 +73,10 @@ apiClient.interceptors.response.use(
     }
     
     if (error.response) {
-      // Server responded with error status
-      const message = (error.response.data as any)?.message || error.message || 'Request failed';
-      throw new Error(`${error.response.status}: ${message}`);
+      // Server responded with error status - surface backend message directly
+      const data = (error.response.data as any) || {};
+      const message = data.message || data.error || error.message || 'Request failed';
+      throw new Error(message);
     } else if (error.request) {
       // Request was made but no response received
       throw new Error('Network error: No response from server');

@@ -2,15 +2,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Calendar, BarChart3, Trash2 } from 'lucide-react';
 import { DashboardData } from '../modules/useDashboardState';
-import { ChartRenderer } from '@/pages/Home/Components/ChartRenderer';
+import { ResizableChartRenderer } from '@/pages/Home/Components/ResizableChartRenderer';
+import { DraggableChart } from './DraggableChart';
 
 interface DashboardViewProps {
   dashboard: DashboardData;
   onBack: () => void;
   onDeleteChart: (chartIndex: number) => void;
+  onReorderCharts: (fromIndex: number, toIndex: number) => void;
 }
 
-export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardViewProps) {
+export function DashboardView({ dashboard, onBack, onDeleteChart, onReorderCharts }: DashboardViewProps) {
   if (dashboard.charts.length === 0) {
     return (
       <div className="h-[calc(100vh-10vh)] overflow-y-auto bg-white">
@@ -66,32 +68,22 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {dashboard.charts.map((chart, index) => (
-          <div key={`${chart.title}-${index}`} className="relative group">
-            <ChartRenderer
-              chart={chart}
-              index={index}
-              isSingleChart={false}
-              showAddButton={false}
-            />
-            
-            {/* Delete button - positioned at top right of chart */}
-            <Button
-              variant="destructive"
-              size="icon"
-              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg h-8 w-8 z-10"
-              style={{ position: 'absolute', top: '8px', right: '8px' }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Delete button clicked for chart index:', index);
-                onDeleteChart(index);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+       <div>
+         {dashboard.charts.map((chart, index) => (
+          <DraggableChart
+            key={`${chart.title}-${index}`}
+            index={index}
+            onReorder={onReorderCharts}
+            className="group"
+          >
+             <ResizableChartRenderer
+               chart={chart}
+               index={index}
+               isSingleChart={false}
+               showAddButton={false}
+               onDelete={() => onDeleteChart(index)}
+             />
+          </DraggableChart>
         ))}
         </div>
       </div>

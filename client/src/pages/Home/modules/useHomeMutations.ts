@@ -89,6 +89,12 @@ export const useHomeMutations = ({
           message,
           chatHistory: messages,
         },
+        // Single attempt: do not retry; surface backend error directly
+        config: {
+          headers: {
+            'X-Single-Attempt': 'true'
+          }
+        }
       });
     },
     onSuccess: (data, message) => {

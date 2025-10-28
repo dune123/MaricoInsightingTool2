@@ -128,6 +128,39 @@ export const useDashboardState = () => {
     }
   };
 
+  const reorderChartsInDashboard = (dashboardId: string, fromIndex: number, toIndex: number) => {
+    console.log('Reordering charts in dashboard:', { dashboardId, fromIndex, toIndex });
+    
+    try {
+      setDashboards(prev => {
+        const dashboardExists = prev.find(d => d.id === dashboardId);
+        if (!dashboardExists) {
+          console.error('Dashboard not found for reordering:', dashboardId);
+          return prev;
+        }
+        
+        const updated = prev.map(dashboard => 
+          dashboard.id === dashboardId 
+            ? {
+                ...dashboard,
+                charts: (() => {
+                  const newCharts = [...dashboard.charts];
+                  const [movedChart] = newCharts.splice(fromIndex, 1);
+                  newCharts.splice(toIndex, 0, movedChart);
+                  return newCharts;
+                })(),
+                updatedAt: new Date()
+              }
+            : dashboard
+        );
+        console.log('Updated dashboards after reordering:', updated);
+        return updated;
+      });
+    } catch (error) {
+      console.error('Error reordering charts in dashboard:', error);
+    }
+  };
+
   const getDashboardById = (dashboardId: string): DashboardData | undefined => {
     return dashboards.find(dashboard => dashboard.id === dashboardId);
   };
@@ -139,6 +172,7 @@ export const useDashboardState = () => {
     createDashboard,
     addChartToDashboard,
     removeChartFromDashboard,
+    reorderChartsInDashboard,
     deleteDashboard,
     getDashboardById
   };

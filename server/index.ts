@@ -28,19 +28,19 @@ app.get('/api/health', (req, res) => {
     try {
       await initializeCosmosDB();
     } catch (cosmosError) {
-      console.warn("⚠️ CosmosDB initialization failed, continuing without it:", cosmosError.message);
+      console.warn("⚠️ CosmosDB initialization failed, continuing without it:", cosmosError instanceof Error ? cosmosError.message : String(cosmosError));
     }
     
     // Initialize Azure Blob Storage (optional)
     try {
       await initializeBlobStorage();
     } catch (blobError) {
-      console.warn("⚠️ Azure Blob Storage initialization failed, continuing without it:", blobError.message);
+      console.warn("⚠️ Azure Blob Storage initialization failed, continuing without it:", blobError instanceof Error ? blobError.message : String(blobError));
     }
     
     const server = await registerRoutes(app);
     
-    const port = process.env.PORT || 3003;
+    const port = process.env.PORT || 3002;
     server.listen(port, () => {
       console.log(`Server running on port ${port}`);
     });
