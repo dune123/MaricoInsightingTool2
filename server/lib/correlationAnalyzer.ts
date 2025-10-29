@@ -1,5 +1,6 @@
-import { ChartSpec, Insight } from '@shared/schema.js';
+import { ChartSpec, Insight, DataSummary } from '@shared/schema.js';
 import { openai, MODEL } from './openai.js';
+import { generateChartInsights } from './insightGenerator.js';
 
 // Helper to clean numeric values (strip %, commas, etc.)
 function toNumber(value: any): number {
@@ -11,6 +12,32 @@ function toNumber(value: any): number {
 interface CorrelationResult {
   variable: string;
   correlation: number;
+  nPairs?: number;
+}
+
+// Calculate linear regression (slope and intercept) for trend line
+function linearRegression(xValues: number[], yValues: number[]): { slope: number; intercept: number } | null {
+  const n = Math.min(xValues.length, yValues.length);
+  if (n === 0) return null;
+
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    const x = xValues[i];
+    const y = yValues[i];
+    if (isNaN(x) || isNaN(y)) continue;
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+
+  return { slope, intercept };
 }
 
 export async function analyzeCorrelations(
@@ -26,15 +53,20 @@ export async function analyzeCorrelations(
   // Calculate correlations
   const correlations = calculateCorrelations(data, targetVariable, numericColumns);
   console.log('Correlations calculated:', correlations);
+  console.log('=== RAW CORRELATION VALUES DEBUG ===');
+  correlations.forEach((corr, idx) => {
+    console.log(`RAW ${idx + 1}. ${corr.variable}: ${corr.correlation} (${corr.correlation > 0 ? 'POSITIVE' : 'NEGATIVE'})`);
+  });
+  console.log('=== END RAW CORRELATION DEBUG ===');
 
   if (correlations.length === 0) {
     console.error('No correlations found!');
     return { charts: [], insights: [] };
   }
 
-  // Get top 5 positive and top 3 negative correlations
+  // Get top correlations (by absolute value)
   const sortedCorrelations = correlations.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
-  const topCorrelations = sortedCorrelations.slice(0, 8);
+  const topCorrelations = sortedCorrelations.slice(0, 12);
 
   // Generate scatter plots for top 3 correlations
   const scatterCharts: ChartSpec[] = topCorrelations.slice(0, 3).map((corr, idx) => {
@@ -62,6 +94,9 @@ export async function analyzeCorrelations(
     let xDomain: [number, number] | undefined;
     let yDomain: [number, number] | undefined;
     
+    // Calculate trend line
+    let trendLine: Array<Record<string, number>> | undefined;
+    
     if (scatterData.length > 0) {
       const xValues = scatterData.map(row => row[xAxis]);
       const yValues = scatterData.map(row => row[yAxis]);
@@ -84,9 +119,25 @@ export async function analyzeCorrelations(
       if (isFinite(yMin) && isFinite(yMax)) {
         yDomain = [yMin - yPadding, yMax + yPadding];
       }
+      
+      // Calculate linear regression for trend line
+      const regression = linearRegression(xValues, yValues);
+      
+      if (regression) {
+        // Calculate trend line endpoints using the calculated domain (or actual min/max if domain not set)
+        const xMinForLine = xDomain ? xDomain[0] : xMin;
+        const xMaxForLine = xDomain ? xDomain[1] : xMax;
+        const yAtMin = regression.slope * xMinForLine + regression.intercept;
+        const yAtMax = regression.slope * xMaxForLine + regression.intercept;
+        
+        trendLine = [
+          { [xAxis]: xMinForLine, [yAxis]: yAtMin },
+          { [xAxis]: xMaxForLine, [yAxis]: yAtMax },
+        ];
+      }
     }
     
-    console.log(`Scatter chart ${idx}: ${corr.variable} vs ${targetVariable}, data points: ${scatterData.length}, axes: ${useSwappedAxes ? 'swapped' : 'normal'}${xDomain ? `, xDomain: [${xDomain[0].toFixed(1)}, ${xDomain[1].toFixed(1)}]` : ''}${yDomain ? `, yDomain: [${yDomain[0].toFixed(1)}, ${yDomain[1].toFixed(1)}]` : ''}`);
+    console.log(`Scatter chart ${idx}: ${corr.variable} vs ${targetVariable}, data points: ${scatterData.length}, axes: ${useSwappedAxes ? 'swapped' : 'normal'}${xDomain ? `, xDomain: [${xDomain[0].toFixed(1)}, ${xDomain[1].toFixed(1)}]` : ''}${yDomain ? `, yDomain: [${yDomain[0].toFixed(1)}, ${yDomain[1].toFixed(1)}]` : ''}${trendLine ? ', trend line: yes' : ', trend line: no'}`);
     
     return {
       type: 'scatter',
@@ -96,6 +147,7 @@ export async function analyzeCorrelations(
       data: scatterData,
       ...(xDomain && { xDomain }),
       ...(yDomain && { yDomain }),
+      ...(trendLine && { trendLine }),
     };
   });
 
@@ -103,6 +155,13 @@ export async function analyzeCorrelations(
   const charts: ChartSpec[] = [...scatterCharts];
   
   if (topCorrelations.length > 1) {
+    // IMPORTANT: Do NOT modify correlation signs - show actual positive/negative values
+    console.log('=== BAR CHART CORRELATION VALUES DEBUG ===');
+    topCorrelations.forEach((corr, idx) => {
+      console.log(`${idx + 1}. ${corr.variable}: ${corr.correlation} (${corr.correlation > 0 ? 'POSITIVE' : 'NEGATIVE'})`);
+    });
+    console.log('=== END BAR CHART DEBUG ===');
+    
     const correlationBarChart: ChartSpec = {
       type: 'bar',
       title: `Factors Affecting ${targetVariable}`,
@@ -110,17 +169,48 @@ export async function analyzeCorrelations(
       y: 'correlation',
       data: topCorrelations.map((corr) => ({
         variable: corr.variable,
-        correlation: Math.abs(corr.correlation),
+        correlation: corr.correlation, // CRITICAL: Keep original sign (positive/negative)
       })),
     };
+    
+    console.log('=== FINAL BAR CHART DATA DEBUG ===');
+    console.log('Bar chart data being sent to frontend:');
+    const barData = (correlationBarChart.data || []) as Array<{ variable: string; correlation: number }>;
+    barData.forEach((item, idx) => {
+      const corrVal = Number(item.correlation);
+      console.log(`FINAL ${idx + 1}. ${item.variable}: ${corrVal} (${corrVal > 0 ? 'POSITIVE' : 'NEGATIVE'})`);
+    });
+    console.log('=== END FINAL BAR CHART DEBUG ===');
+    
     charts.push(correlationBarChart);
   }
 
   console.log('Total charts generated:', charts.length);
   console.log('=== END CORRELATION DEBUG ===');
 
-  // Generate AI insights about correlations
-  const insights = await generateCorrelationInsights(targetVariable, topCorrelations);
+  // Enrich each chart with keyInsight and recommendation
+  try {
+    const summaryStub: DataSummary = {
+      rowCount: data.length,
+      columnCount: Object.keys(data[0] || {}).length,
+      columns: Object.keys(data[0] || {}).map((name) => ({ name, type: typeof (data[0] || {})[name], sampleValues: [] as any })),
+      numericColumns: numericColumns,
+      dateColumns: [],
+    } as unknown as DataSummary;
+
+    const chartsWithInsights = await Promise.all(
+      charts.map(async (c) => {
+        const chartInsights = await generateChartInsights(c, c.data || [], summaryStub);
+        return { ...c, keyInsight: chartInsights.keyInsight, recommendation: chartInsights.recommendation } as ChartSpec;
+      })
+    );
+    charts.splice(0, charts.length, ...chartsWithInsights);
+  } catch (e) {
+    console.error('Failed to enrich correlation charts with insights:', e);
+  }
+
+  // Generate AI insights about correlations (use full sorted list so AI doesn't miss variables)
+  const insights = await generateCorrelationInsights(targetVariable, sortedCorrelations);
 
   return { charts, insights };
 }
@@ -132,27 +222,33 @@ function calculateCorrelations(
 ): CorrelationResult[] {
   const correlations: CorrelationResult[] = [];
 
-  // Get target values
-  const targetValues = data
-    .map((row) => toNumber(row[targetVariable]))
-    .filter((v) => !isNaN(v));
-
-  if (targetValues.length === 0) return [];
+  // Precompute target values (keep row alignment; NA preserved as NaN)
+  const targetValuesAllRows = data.map((row) => toNumber(row[targetVariable]));
+  const hasAnyTarget = targetValuesAllRows.some((v) => !isNaN(v));
+  if (!hasAnyTarget) return [];
 
   for (const col of numericColumns) {
     if (col === targetVariable) continue;
 
-    const colValues = data
-      .map((row) => toNumber(row[col]))
-      .filter((v) => !isNaN(v));
+    // Build row-aligned pairs; skip rows where either side is NA (pairwise deletion)
+    const x: number[] = []; // target
+    const y: number[] = []; // column
+    for (let i = 0; i < data.length; i++) {
+      const tv = targetValuesAllRows[i];
+      const cv = toNumber(data[i][col]);
+      if (!isNaN(tv) && !isNaN(cv)) {
+        x.push(tv);
+        y.push(cv);
+      }
+    }
 
-    if (colValues.length === 0) continue;
+    if (x.length === 0) continue;
 
-    // Calculate Pearson correlation
-    const correlation = pearsonCorrelation(targetValues, colValues);
+    // Calculate Pearson correlation on paired arrays
+    const correlation = pearsonCorrelation(x, y);
 
     if (!isNaN(correlation)) {
-      correlations.push({ variable: col, correlation });
+      correlations.push({ variable: col, correlation, nPairs: x.length });
     }
   }
 
@@ -179,32 +275,22 @@ async function generateCorrelationInsights(
   targetVariable: string,
   correlations: CorrelationResult[]
 ): Promise<Insight[]> {
-  const prompt = `Analyze these correlations with ${targetVariable}:
+  const prompt = `Analyze these correlations with ${targetVariable}.
 
-${correlations.map((c) => `- ${c.variable}: ${c.correlation.toFixed(3)}`).join('\n')}
+DATA HANDLING RULES (must follow exactly):
+- Pearson correlation using pairwise deletion: if either value is NA on a row, exclude that row; do not impute.
+- Use the EXACT signed correlation values provided; never change the sign.
+- Cover ALL variables at least once in the insights (do not omit any listed below).
 
-Provide 3-5 detailed correlation insights. Each insight MUST include:
-1. A bold headline with the key finding (e.g., **Strongest Positive Correlation:**)
-2. Specific correlation values and what they mean
-3. Explanation of WHY this correlation matters
-4. Actionable recommendation or caution about correlation vs causation
+VALUES (variable: r, nPairs):
+${correlations.map((c) => `- ${c.variable}: ${c.correlation.toFixed(3)}, n=${c.nPairs ?? 'NA'}`).join('\n')}
 
-Format each insight as a complete paragraph:
-**[Insight Title]:** [Finding with specific correlation values]. **Why it matters:** [Business impact or interpretation]. **Actionable Recommendation:** [Specific action or caution about causation].
+Write 3-5 insights. Each must include: (1) bold headline, (2) exact r and nPairs, (3) interpretation, (4) one actionable recommendation and a reminder that correlation != causation.
 
-Example:
-**Strong Negative Correlation with Defects:** Manufacturing costs show a strong negative correlation (r=-0.78) with ${targetVariable}, indicating higher costs are associated with lower ${targetVariable} values. **Why it matters:** This unexpected relationship suggests potential quality issues when costs are cut, impacting ${targetVariable} performance. **Actionable Recommendation:** Investigate whether cost-cutting measures are compromising quality; establish minimum quality thresholds before cost optimization.
-
-Output as JSON array:
-{
-  "insights": [
-    { "text": "**Insight Title:** Full detailed insight text..." },
-    ...
-  ]
-}`;
+Output JSON only: {"insights":[{"text":"..."}]}`;
 
   const response = await openai.chat.completions.create({
-    model: MODEL,
+    model: MODEL || "gpt-4o",
     messages: [
       {
         role: 'system',

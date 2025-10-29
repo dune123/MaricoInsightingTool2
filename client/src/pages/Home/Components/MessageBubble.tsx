@@ -37,18 +37,16 @@ export function MessageBubble({
       )}
       
       <div className={`flex-1 max-w-[90%] ${isUser ? 'ml-auto' : 'mr-0'}`}>
-        <div
-          className={`rounded-xl px-4 py-3 shadow-sm ${
-            isUser
-              ? 'bg-primary text-primary-foreground ml-auto'
-              : 'bg-white text-gray-900 border border-gray-100'
-          }`}
-          data-testid={`message-content-${message.role}`}
-        >
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {message.content}
-          </p>
-        </div>
+        {isUser && (
+          <div
+            className={`rounded-xl px-4 py-3 shadow-sm bg-primary text-primary-foreground ml-auto`}
+            data-testid={`message-content-${message.role}`}
+          >
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
+          </div>
+        )}
 
         {!isUser && sampleRows && columns && sampleRows.length > 0 && (
           <div className="mt-3">
