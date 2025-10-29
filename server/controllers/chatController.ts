@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { answerQuestion } from "../lib/dataAnalyzer.js";
+import { processChartData } from "../lib/chartGenerator.js";
+import { generateChartInsights } from "../lib/insightGenerator.js";
 import { chatResponseSchema } from "@shared/schema.js";
 import { getChatBySessionIdEfficient, addMessageToChat } from "../lib/cosmosDB.js";
 
@@ -26,6 +28,30 @@ export const chatWithAI = async (req: Request, res: Response) => {
       chatHistory || [],
       chatDocument.dataSummary
     );
+
+    // Ensure every chart has per-chart keyInsight and recommendation before validation
+    if (result.charts && Array.isArray(result.charts)) {
+      try {
+        result.charts = await Promise.all(
+          result.charts.map(async (c: any) => {
+            const dataForChart = c.data && Array.isArray(c.data)
+              ? c.data
+              : processChartData(chatDocument.rawData, c);
+            const insights = (!('keyInsight' in c) || !('recommendation' in c))
+              ? await generateChartInsights(c, dataForChart, chatDocument.dataSummary)
+              : null;
+            return {
+              ...c,
+              data: dataForChart,
+              keyInsight: c.keyInsight ?? insights?.keyInsight,
+              recommendation: c.recommendation ?? insights?.recommendation,
+            };
+          })
+        );
+      } catch (e) {
+        console.error('Final enrichment of chat charts failed:', e);
+      }
+    }
 
     // Validate response
     const validated = chatResponseSchema.parse(result);

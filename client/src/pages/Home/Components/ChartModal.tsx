@@ -11,6 +11,7 @@ import {
   Bar,
   ScatterChart,
   Scatter,
+  ComposedChart,
   PieChart,
   Pie,
   AreaChart,
@@ -58,7 +59,7 @@ const formatAxisLabel = (value: number): string => {
 };
 
 export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
-  const { type, title, data = [], x, y, xDomain, yDomain } = chart;
+  const { type, title, data = [], x, y, xDomain, yDomain, trendLine } = chart;
   const chartColor = COLORS[0]; // Use primary color for modal
 
   const renderChart = () => {
@@ -154,9 +155,49 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
           return 8;
         };
 
+        // Calculate trendline if not provided but we have data
+        let trendlineData = trendLine;
+        if (!trendlineData && data.length > 0 && xDomain && yDomain) {
+          // Calculate linear regression from data points
+          const validData = data.filter((d: any) => {
+            const xVal = typeof d[x] === 'number' ? d[x] : Number(d[x]);
+            const yVal = typeof d[y] === 'number' ? d[y] : Number(d[y]);
+            return !isNaN(xVal) && !isNaN(yVal);
+          });
+
+          if (validData.length > 1) {
+            const xValues = validData.map((d: any) => typeof d[x] === 'number' ? d[x] : Number(d[x]));
+            const yValues = validData.map((d: any) => typeof d[y] === 'number' ? d[y] : Number(d[y]));
+            
+            // Calculate linear regression
+            const n = xValues.length;
+            const sumX = xValues.reduce((a, b) => a + b, 0);
+            const sumY = yValues.reduce((a, b) => a + b, 0);
+            const sumXY = xValues.reduce((sum, xi, i) => sum + xi * yValues[i], 0);
+            const sumX2 = xValues.reduce((sum, xi) => sum + xi * xi, 0);
+            
+            const denominator = n * sumX2 - sumX * sumX;
+            if (denominator !== 0) {
+              const slope = (n * sumXY - sumX * sumY) / denominator;
+              const intercept = (sumY - slope * sumX) / n;
+              
+              // Create trendline points using the domain boundaries
+              const xMin = xDomain[0];
+              const xMax = xDomain[1];
+              const yAtMin = slope * xMin + intercept;
+              const yAtMax = slope * xMax + intercept;
+              
+              trendlineData = [
+                { [x]: xMin, [y]: yAtMin },
+                { [x]: xMax, [y]: yAtMax },
+              ];
+            }
+          }
+        }
+
         return (
           <ResponsiveContainer width="100%" height={400}>
-            <ScatterChart margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
+            <ComposedChart margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -192,7 +233,21 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
               <Scatter name={`${x} vs ${y}`} data={data} fill={chartColor} fillOpacity={0.8} />
-            </ScatterChart>
+              {trendlineData && trendlineData.length === 2 && (
+                <Line
+                  type="linear"
+                  dataKey={y}
+                  data={trendlineData}
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  activeDot={false}
+                  legendType="none"
+                  connectNulls={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         );
 
@@ -358,3 +413,4 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
     </Dialog>
   );
 }
+

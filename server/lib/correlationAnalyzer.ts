@@ -1,5 +1,6 @@
-import { ChartSpec, Insight } from '@shared/schema.js';
+import { ChartSpec, Insight, DataSummary } from '@shared/schema.js';
 import { openai, MODEL } from './openai.js';
+import { generateChartInsights } from './insightGenerator.js';
 
 // Helper to clean numeric values (strip %, commas, etc.)
 function toNumber(value: any): number {
@@ -12,6 +13,31 @@ interface CorrelationResult {
   variable: string;
   correlation: number;
   nPairs?: number;
+}
+
+// Calculate linear regression (slope and intercept) for trend line
+function linearRegression(xValues: number[], yValues: number[]): { slope: number; intercept: number } | null {
+  const n = Math.min(xValues.length, yValues.length);
+  if (n === 0) return null;
+
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    const x = xValues[i];
+    const y = yValues[i];
+    if (isNaN(x) || isNaN(y)) continue;
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+
+  return { slope, intercept };
 }
 
 export async function analyzeCorrelations(
@@ -68,6 +94,9 @@ export async function analyzeCorrelations(
     let xDomain: [number, number] | undefined;
     let yDomain: [number, number] | undefined;
     
+    // Calculate trend line
+    let trendLine: Array<Record<string, number>> | undefined;
+    
     if (scatterData.length > 0) {
       const xValues = scatterData.map(row => row[xAxis]);
       const yValues = scatterData.map(row => row[yAxis]);
@@ -90,9 +119,25 @@ export async function analyzeCorrelations(
       if (isFinite(yMin) && isFinite(yMax)) {
         yDomain = [yMin - yPadding, yMax + yPadding];
       }
+      
+      // Calculate linear regression for trend line
+      const regression = linearRegression(xValues, yValues);
+      
+      if (regression) {
+        // Calculate trend line endpoints using the calculated domain (or actual min/max if domain not set)
+        const xMinForLine = xDomain ? xDomain[0] : xMin;
+        const xMaxForLine = xDomain ? xDomain[1] : xMax;
+        const yAtMin = regression.slope * xMinForLine + regression.intercept;
+        const yAtMax = regression.slope * xMaxForLine + regression.intercept;
+        
+        trendLine = [
+          { [xAxis]: xMinForLine, [yAxis]: yAtMin },
+          { [xAxis]: xMaxForLine, [yAxis]: yAtMax },
+        ];
+      }
     }
     
-    console.log(`Scatter chart ${idx}: ${corr.variable} vs ${targetVariable}, data points: ${scatterData.length}, axes: ${useSwappedAxes ? 'swapped' : 'normal'}${xDomain ? `, xDomain: [${xDomain[0].toFixed(1)}, ${xDomain[1].toFixed(1)}]` : ''}${yDomain ? `, yDomain: [${yDomain[0].toFixed(1)}, ${yDomain[1].toFixed(1)}]` : ''}`);
+    console.log(`Scatter chart ${idx}: ${corr.variable} vs ${targetVariable}, data points: ${scatterData.length}, axes: ${useSwappedAxes ? 'swapped' : 'normal'}${xDomain ? `, xDomain: [${xDomain[0].toFixed(1)}, ${xDomain[1].toFixed(1)}]` : ''}${yDomain ? `, yDomain: [${yDomain[0].toFixed(1)}, ${yDomain[1].toFixed(1)}]` : ''}${trendLine ? ', trend line: yes' : ', trend line: no'}`);
     
     return {
       type: 'scatter',
@@ -102,6 +147,7 @@ export async function analyzeCorrelations(
       data: scatterData,
       ...(xDomain && { xDomain }),
       ...(yDomain && { yDomain }),
+      ...(trendLine && { trendLine }),
     };
   });
 
@@ -129,8 +175,10 @@ export async function analyzeCorrelations(
     
     console.log('=== FINAL BAR CHART DATA DEBUG ===');
     console.log('Bar chart data being sent to frontend:');
-    correlationBarChart.data.forEach((item, idx) => {
-      console.log(`FINAL ${idx + 1}. ${item.variable}: ${item.correlation} (${item.correlation > 0 ? 'POSITIVE' : 'NEGATIVE'})`);
+    const barData = (correlationBarChart.data || []) as Array<{ variable: string; correlation: number }>;
+    barData.forEach((item, idx) => {
+      const corrVal = Number(item.correlation);
+      console.log(`FINAL ${idx + 1}. ${item.variable}: ${corrVal} (${corrVal > 0 ? 'POSITIVE' : 'NEGATIVE'})`);
     });
     console.log('=== END FINAL BAR CHART DEBUG ===');
     
@@ -139,6 +187,27 @@ export async function analyzeCorrelations(
 
   console.log('Total charts generated:', charts.length);
   console.log('=== END CORRELATION DEBUG ===');
+
+  // Enrich each chart with keyInsight and recommendation
+  try {
+    const summaryStub: DataSummary = {
+      rowCount: data.length,
+      columnCount: Object.keys(data[0] || {}).length,
+      columns: Object.keys(data[0] || {}).map((name) => ({ name, type: typeof (data[0] || {})[name], sampleValues: [] as any })),
+      numericColumns: numericColumns,
+      dateColumns: [],
+    } as unknown as DataSummary;
+
+    const chartsWithInsights = await Promise.all(
+      charts.map(async (c) => {
+        const chartInsights = await generateChartInsights(c, c.data || [], summaryStub);
+        return { ...c, keyInsight: chartInsights.keyInsight, recommendation: chartInsights.recommendation } as ChartSpec;
+      })
+    );
+    charts.splice(0, charts.length, ...chartsWithInsights);
+  } catch (e) {
+    console.error('Failed to enrich correlation charts with insights:', e);
+  }
 
   // Generate AI insights about correlations (use full sorted list so AI doesn't miss variables)
   const insights = await generateCorrelationInsights(targetVariable, sortedCorrelations);
@@ -221,7 +290,7 @@ Write 3-5 insights. Each must include: (1) bold headline, (2) exact r and nPairs
 Output JSON only: {"insights":[{"text":"..."}]}`;
 
   const response = await openai.chat.completions.create({
-    model: MODEL,
+    model: MODEL || "gpt-4o",
     messages: [
       {
         role: 'system',
