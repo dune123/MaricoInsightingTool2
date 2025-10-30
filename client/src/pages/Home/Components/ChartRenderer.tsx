@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChartSpec } from '@shared/schema';
 import { ChartModal } from './ChartModal';
+import { ChartOnlyModal } from '@/pages/Dashboard/Components/ChartOnlyModal';
 import { DashboardModal } from './DashboardModal/DashboardModal';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
@@ -30,6 +31,8 @@ interface ChartRendererProps {
   index: number;
   isSingleChart?: boolean;
   showAddButton?: boolean;
+  useChartOnlyModal?: boolean;
+  fillParent?: boolean;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -53,17 +56,17 @@ const formatAxisLabel = (value: number): string => {
   return value.toFixed(0);
 };
 
-export function ChartRenderer({ chart, index, isSingleChart = false, showAddButton = true }: ChartRendererProps) {
+export function ChartRenderer({ chart, index, isSingleChart = false, showAddButton = true, useChartOnlyModal = false, fillParent = false }: ChartRendererProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
-  const { type, title, data = [], x, y, xDomain, yDomain, trendLine } = chart;
+  const { type, title, data = [], x, y, xDomain, yDomain, trendLine, xLabel, yLabel } = chart;
   const chartColor = COLORS[index % COLORS.length];
 
   const renderChart = () => {
     switch (type) {
       case 'line':
         return (
-          <ResponsiveContainer width="100%" height={isSingleChart ? 400 : 250}>
+          <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
             <LineChart data={data} margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -71,12 +74,14 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 angle={-45}
                 textAnchor="end"
+                label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
                 height={50}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 width={60}
                 tickFormatter={formatAxisLabel}
+                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
               />
               <Tooltip />
               <Line
@@ -93,7 +98,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
       case 'bar':
         return (
-          <ResponsiveContainer width="100%" height={isSingleChart ? 400 : 250}>
+          <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
             <BarChart data={data} margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -101,12 +106,14 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 angle={-45}
                 textAnchor="end"
+                label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
                 height={50}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 width={60}
                 tickFormatter={formatAxisLabel}
+                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
               />
               <Tooltip />
               <Bar dataKey={y} fill={chartColor} radius={[4, 4, 0, 0]} />
@@ -166,7 +173,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
         // Use ComposedChart to render scatter with trendline
         return (
-          <ResponsiveContainer width="100%" height={isSingleChart ? 400 : 250}>
+          <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
             <ComposedChart margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -176,6 +183,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 domain={xDomain || ['auto', 'auto']}
                 tickFormatter={formatAxisLabel}
                 tickCount={getTickCount(xDomain)}
+                label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
               />
               <YAxis
                 dataKey={y}
@@ -185,6 +193,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 tickFormatter={formatAxisLabel}
                 tickCount={getTickCount(yDomain)}
                 width={60}
+                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
               />
               <Tooltip />
               <Scatter name={`${x} vs ${y}`} data={data} fill={chartColor} fillOpacity={0.6} />
@@ -208,7 +217,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
       case 'pie':
         return (
-          <ResponsiveContainer width="100%" height={isSingleChart ? 400 : 250}>
+          <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
             <PieChart>
               <Pie
                 data={data}
@@ -231,7 +240,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
       case 'area':
         return (
-          <ResponsiveContainer width="100%" height={isSingleChart ? 400 : 250}>
+          <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
             <AreaChart data={data} margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -239,12 +248,14 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 angle={-45}
                 textAnchor="end"
+                label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
                 height={50}
               />
               <YAxis
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 width={60}
                 tickFormatter={formatAxisLabel}
+                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
               />
               <Tooltip />
               <Area
@@ -266,13 +277,13 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
   return (
     <>
-      <div className="bg-card border border-border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow relative group">
+      <div className="bg-card border border-border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow relative group h-full">
         <div
-          className="cursor-pointer"
+          className={`cursor-pointer ${fillParent ? 'h-full flex flex-col' : ''}`}
           onClick={() => setIsModalOpen(true)}
         >
           <h3 className="text-sm font-semibold mb-2 text-foreground line-clamp-2">{title}</h3>
-          <div className="w-full">{renderChart()}</div>
+          <div className={`w-full ${fillParent ? 'flex-1 min-h-0' : ''}`}>{renderChart()}</div>
         </div>
         {showAddButton && (
           <Button
@@ -289,11 +300,19 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
           </Button>
         )}
       </div>
-      <ChartModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        chart={chart}
-      />
+      {useChartOnlyModal ? (
+        <ChartOnlyModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          chart={chart}
+        />
+      ) : (
+        <ChartModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          chart={chart}
+        />
+      )}
       <DashboardModal
         isOpen={isDashboardModalOpen}
         onClose={() => setIsDashboardModalOpen(false)}

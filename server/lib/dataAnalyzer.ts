@@ -24,6 +24,8 @@ export async function analyzeUpload(
     
     return {
       ...spec,
+      xLabel: spec.x,
+      yLabel: spec.y,
       data: processedData,
       keyInsight: chartInsights.keyInsight,
       recommendation: chartInsights.recommendation,
@@ -679,6 +681,8 @@ Output JSON:
         
         return {
           ...spec,
+          xLabel: spec.x,
+          yLabel: spec.y,
           data: processedData,
           keyInsight: chartInsights.keyInsight,
           recommendation: chartInsights.recommendation,

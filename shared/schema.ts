@@ -6,6 +6,8 @@ export const chartSpecSchema = z.object({
   title: z.string(),
   x: z.string(),
   y: z.string(),
+  xLabel: z.string().optional(),
+  yLabel: z.string().optional(),
   aggregate: z.enum(["sum", "mean", "count", "none"]).optional(),
   data: z.array(z.record(z.union([z.string(), z.number()]))).optional(),
   xDomain: z.tuple([z.number(), z.number()]).optional(), // [min, max] for X-axis
