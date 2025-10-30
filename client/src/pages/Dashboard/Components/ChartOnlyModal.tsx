@@ -20,11 +20,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   Cell,
 } from 'recharts';
 
-interface ChartModalProps {
+interface ChartOnlyModalProps {
   isOpen: boolean;
   onClose: () => void;
   chart: ChartSpec;
@@ -32,19 +31,13 @@ interface ChartModalProps {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
-// Smart number formatter for axis labels
 const formatAxisLabel = (value: number): string => {
-  // Handle very small decimals
   if (Math.abs(value) < 0.01 && value !== 0) {
     return value.toFixed(4);
   }
-  
-  // Handle decimals
   if (Math.abs(value) < 1000 && value % 1 !== 0) {
     return value.toFixed(2);
   }
-  
-  // Handle large numbers with K, M, B suffixes
   const absValue = Math.abs(value);
   if (absValue >= 1e9) {
     return (value / 1e9).toFixed(1) + 'B';
@@ -53,20 +46,18 @@ const formatAxisLabel = (value: number): string => {
   } else if (absValue >= 1e3) {
     return (value / 1e3).toFixed(1) + 'K';
   }
-  
-  // Handle integers and small numbers
   return value.toFixed(0);
 };
 
-export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
+export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) {
   const { type, title, data = [], x, y, xDomain, yDomain, trendLine, xLabel, yLabel } = chart;
-  const chartColor = COLORS[0]; // Use primary color for modal
+  const chartColor = COLORS[0];
 
   const renderChart = () => {
     switch (type) {
       case 'line':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={480}>
             <LineChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -107,10 +98,9 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
             </LineChart>
           </ResponsiveContainer>
         );
-
       case 'bar':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={480}>
             <BarChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -144,7 +134,6 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
             </BarChart>
           </ResponsiveContainer>
         );
-
       case 'scatter':
         const getTickCount = (domain: [number, number] | undefined): number => {
           if (!domain) return 8;
@@ -155,10 +144,8 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
           return 8;
         };
 
-        // Calculate trendline if not provided but we have data
         let trendlineData = trendLine;
         if (!trendlineData && data.length > 0 && xDomain && yDomain) {
-          // Calculate linear regression from data points
           const validData = data.filter((d: any) => {
             const xVal = typeof d[x] === 'number' ? d[x] : Number(d[x]);
             const yVal = typeof d[y] === 'number' ? d[y] : Number(d[y]);
@@ -166,27 +153,25 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
           });
 
           if (validData.length > 1) {
-            const xValues = validData.map((d: any) => typeof d[x] === 'number' ? d[x] : Number(d[x]));
-            const yValues = validData.map((d: any) => typeof d[y] === 'number' ? d[y] : Number(d[y]));
-            
-            // Calculate linear regression
+            const xValues = validData.map((d: any) => (typeof d[x] === 'number' ? d[x] : Number(d[x])));
+            const yValues = validData.map((d: any) => (typeof d[y] === 'number' ? d[y] : Number(d[y])));
+
             const n = xValues.length;
             const sumX = xValues.reduce((a, b) => a + b, 0);
             const sumY = yValues.reduce((a, b) => a + b, 0);
             const sumXY = xValues.reduce((sum, xi, i) => sum + xi * yValues[i], 0);
             const sumX2 = xValues.reduce((sum, xi) => sum + xi * xi, 0);
-            
+
             const denominator = n * sumX2 - sumX * sumX;
             if (denominator !== 0) {
               const slope = (n * sumXY - sumX * sumY) / denominator;
               const intercept = (sumY - slope * sumX) / n;
-              
-              // Create trendline points using the domain boundaries
+
               const xMin = xDomain[0];
               const xMax = xDomain[1];
               const yAtMin = slope * xMin + intercept;
               const yAtMax = slope * xMax + intercept;
-              
+
               trendlineData = [
                 { [x]: xMin, [y]: yAtMin },
                 { [x]: xMax, [y]: yAtMax },
@@ -196,7 +181,7 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
         }
 
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={480}>
             <ComposedChart margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -250,10 +235,9 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
             </ComposedChart>
           </ResponsiveContainer>
         );
-
       case 'pie':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={480}>
             <PieChart>
               <Pie
                 data={data}
@@ -283,10 +267,9 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
             </PieChart>
           </ResponsiveContainer>
         );
-
       case 'area':
         return (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={480}>
             <AreaChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
@@ -327,7 +310,6 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
             </AreaChart>
           </ResponsiveContainer>
         );
-
       default:
         return <p className="text-muted-foreground text-center py-8">Unsupported chart type</p>;
     }
@@ -349,68 +331,13 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
             <X className="h-4 w-4" />
           </Button>
         </DialogHeader>
-        
-        <div className="flex-1 overflow-hidden">
-          <div className="flex gap-6 h-[500px]">
-            {/* Left side - Chart */}
-            <div className="flex-1 min-w-0">
-              <div className="h-full w-full">
-                {renderChart()}
-              </div>
-            </div>
-            
-            {/* Right side - Insights and Recommendations */}
-            <div className="w-80 flex-shrink-0 overflow-y-auto">
-              <div className="space-y-4">
-                {/* Key Insight */}
-                {chart.keyInsight && (
-                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                    <div className="flex items-start gap-3">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full mt-1 flex-shrink-0"></div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">Key Insight</h3>
-                          <div 
-                            className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400"
-                            onWheel={(e) => {
-                              e.stopPropagation();
-                              const element = e.currentTarget;
-                              element.scrollTop += e.deltaY;
-                            }}
-                          >
-                            <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed pr-2">{chart.keyInsight}</p>
-                          </div>
-                        </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Recommendation */}
-                {chart.recommendation && (
-                  <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-                    <div className="flex items-start gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full mt-1 flex-shrink-0"></div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">Recommendation</h3>
-                          <div 
-                            className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400"
-                            onWheel={(e) => {
-                              e.stopPropagation();
-                              const element = e.currentTarget;
-                              element.scrollTop += e.deltaY;
-                            }}
-                          >
-                            <p className="text-sm text-green-800 dark:text-green-200 leading-relaxed pr-2">{chart.recommendation}</p>
-                          </div>
-                        </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+
+        <div className="h-[520px] w-full">
+          {renderChart()}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
 

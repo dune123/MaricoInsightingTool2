@@ -144,6 +144,8 @@ export async function analyzeCorrelations(
       title: `${corr.variable} vs ${targetVariable} (r=${corr.correlation.toFixed(2)})`,
       x: xAxis,
       y: yAxis,
+      xLabel: xAxis,
+      yLabel: yAxis,
       data: scatterData,
       ...(xDomain && { xDomain }),
       ...(yDomain && { yDomain }),
@@ -167,6 +169,8 @@ export async function analyzeCorrelations(
       title: `Factors Affecting ${targetVariable}`,
       x: 'variable',
       y: 'correlation',
+      xLabel: 'variable',
+      yLabel: 'correlation',
       data: topCorrelations.map((corr) => ({
         variable: corr.variable,
         correlation: corr.correlation, // CRITICAL: Keep original sign (positive/negative)
