@@ -1,11 +1,12 @@
 import { CosmosClient, Database, Container } from "@azure/cosmos";
-import { ChartSpec, Message, DataSummary, Insight } from "@shared/schema.js";
+import { ChartSpec, Message, DataSummary, Insight, Dashboard } from "@shared/schema.js";
 
 // CosmosDB configuration
 const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT || "";
 const COSMOS_KEY = process.env.COSMOS_KEY || "";
 const COSMOS_DATABASE_ID = process.env.COSMOS_DATABASE_ID || "marico-insights";
 const COSMOS_CONTAINER_ID = process.env.COSMOS_CONTAINER_ID || "chats";
+const COSMOS_DASHBOARDS_CONTAINER_ID = process.env.COSMOS_DASHBOARDS_CONTAINER_ID || "dashboards";
 
 // Initialize CosmosDB client
 const client = new CosmosClient({
@@ -15,6 +16,7 @@ const client = new CosmosClient({
 
 let database: Database;
 let container: Container;
+let dashboardsContainer: Container;
 
 // Initialize database and container
 export const initializeCosmosDB = async () => {
@@ -32,9 +34,16 @@ export const initializeCosmosDB = async () => {
     // Create container if it doesn't exist
     const { container: cont } = await database.containers.createIfNotExists({
       id: COSMOS_CONTAINER_ID,
-      partitionKey: "/username", // Partition by username for better performance
+      partitionKey: "/fsmrora", // Partition by username for better performance
     });
     container = cont;
+
+    // Create dashboards container if it doesn't exist
+    const { container: dashCont } = await database.containers.createIfNotExists({
+      id: COSMOS_DASHBOARDS_CONTAINER_ID,
+      partitionKey: "/username",
+    });
+    dashboardsContainer = dashCont;
 
     console.log("CosmosDB initialized successfully");
   } catch (error) {
@@ -195,6 +204,45 @@ export const addMessageToChat = async (
   }
 };
 
+// Add one or more messages by sessionId (avoids relying on partition key at callsite)
+export const addMessagesBySessionId = async (
+  sessionId: string,
+  messages: Message[]
+): Promise<ChatDocument> => {
+  try {
+    console.log("📝 addMessagesBySessionId - sessionId:", sessionId, "messages:", messages.map(m => m.role));
+    const chatDocumentAny = await getChatBySessionIdEfficient(sessionId as any);
+    const chatDocument = chatDocumentAny as unknown as ChatDocument | null;
+    if (!chatDocument) {
+      throw new Error("Chat document not found for sessionId");
+    }
+
+    console.log("🗂️ Appending to doc:", chatDocument.id, "partition:", chatDocument.username, "existing messages:", chatDocument.messages?.length || 0);
+    chatDocument.messages.push(...messages);
+
+    // Collect any charts from assistant messages into top-level charts
+    messages.forEach((msg) => {
+      if (msg.charts && msg.charts.length > 0) {
+        msg.charts.forEach((chart) => {
+          const exists = chatDocument.charts.find(
+            (c) => c.title === chart.title && c.type === chart.type
+          );
+          if (!exists) {
+            chatDocument.charts.push(chart);
+          }
+        });
+      }
+    });
+
+    const updated = await updateChatDocument(chatDocument);
+    console.log("✅ Upserted chat doc:", updated.id, "messages now:", updated.messages?.length || 0);
+    return updated;
+  } catch (error) {
+    console.error("❌ Failed to add messages by sessionId:", error);
+    throw error;
+  }
+};
+
 // Get all chats for a user
 export const getUserChats = async (username: string): Promise<ChatDocument[]> => {
   try {
@@ -219,8 +267,13 @@ export const getChatBySessionIdEfficient = async (sessionId: string): Promise<Ch
       query,
       parameters: [{ name: "@sessionId", value: sessionId }]
     }).fetchAll();
-    
-    return resources.length > 0 ? resources[0] : null;
+    const doc = (resources && resources.length > 0) ? resources[0] : null;
+    if (!doc) {
+      console.warn("⚠️ No chat document found for sessionId:", sessionId);
+    } else {
+      console.log("🔎 Found chat document by sessionId:", doc.id, "username:", doc.username);
+    }
+    return doc as unknown as ChatDocument | null;
   } catch (error) {
     console.error("❌ Failed to get chat by session ID:", error);
     throw error;
@@ -236,6 +289,92 @@ export const deleteChatDocument = async (chatId: string, username: string): Prom
     console.error("❌ Failed to delete chat document:", error);
     throw error;
   }
+};
+
+// =================== Dashboards CRUD ===================
+
+export const createDashboard = async (
+  username: string,
+  name: string,
+  charts: ChartSpec[] = []
+): Promise<Dashboard> => {
+  if (!dashboardsContainer) {
+    throw new Error("CosmosDB dashboards container not initialized.");
+  }
+  const timestamp = Date.now();
+  const id = `${name.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}`;
+  const dashboard: Dashboard = {
+    id,
+    username,
+    name,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    charts,
+  };
+  const { resource } = await dashboardsContainer.items.create(dashboard);
+  return resource as unknown as Dashboard;
+};
+
+export const getUserDashboards = async (username: string): Promise<Dashboard[]> => {
+  if (!dashboardsContainer) {
+    return [];
+  }
+  const { resources } = await dashboardsContainer.items.query({
+    query: "SELECT * FROM c WHERE c.username = @username ORDER BY c.createdAt DESC",
+    parameters: [{ name: "@username", value: username }],
+  }).fetchAll();
+  return resources as unknown as Dashboard[];
+};
+
+export const getDashboardById = async (id: string, username: string): Promise<Dashboard | null> => {
+  try {
+    const { resource } = await dashboardsContainer.item(id, username).read();
+    return resource as unknown as Dashboard;
+  } catch (error: any) {
+    if (error.code === 404) return null;
+    throw error;
+  }
+};
+
+export const updateDashboard = async (dashboard: Dashboard): Promise<Dashboard> => {
+  dashboard.updatedAt = Date.now();
+  const { resource } = await dashboardsContainer.items.upsert(dashboard);
+  return resource as unknown as Dashboard;
+};
+
+export const deleteDashboard = async (id: string, username: string): Promise<void> => {
+  await dashboardsContainer.item(id, username).delete();
+};
+
+export const addChartToDashboard = async (
+  id: string,
+  username: string,
+  chart: ChartSpec
+): Promise<Dashboard> => {
+  const dashboard = await getDashboardById(id, username);
+  if (!dashboard) throw new Error("Dashboard not found");
+  dashboard.charts.push(chart);
+  return updateDashboard(dashboard);
+};
+
+export const removeChartFromDashboard = async (
+  id: string,
+  username: string,
+  predicate: { index?: number; title?: string; type?: ChartSpec["type"] }
+): Promise<Dashboard> => {
+  const dashboard = await getDashboardById(id, username);
+  if (!dashboard) throw new Error("Dashboard not found");
+
+  if (typeof predicate.index === 'number') {
+    dashboard.charts.splice(predicate.index, 1);
+  } else if (predicate.title || predicate.type) {
+    dashboard.charts = dashboard.charts.filter(c => {
+      const titleMatch = predicate.title ? c.title !== predicate.title : true;
+      const typeMatch = predicate.type ? c.type !== predicate.type : true;
+      return titleMatch || typeMatch;
+    });
+  }
+  return updateDashboard(dashboard);
 };
 
 // Generate column statistics for numeric columns

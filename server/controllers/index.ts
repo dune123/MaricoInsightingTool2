@@ -7,3 +7,10 @@ export {
   getColumnStatistics,
   getRawData
 } from './dataRetrievalController.js';
+export {
+  createDashboardController,
+  listDashboardsController,
+  deleteDashboardController,
+  addChartToDashboardController,
+  removeChartFromDashboardController,
+} from './dashboardController.js';

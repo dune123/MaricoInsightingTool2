@@ -234,18 +234,18 @@ export function DashboardModal({ isOpen, onClose, chart }: DashboardModalProps) 
                 {/* Actions */}
                 <div className="flex gap-2 pt-4">
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       console.log('Button clicked:', { selectedDashboard, newDashboardName, chart });
                       if (selectedDashboard) {
                         // Add to existing dashboard
                         console.log('Adding to existing dashboard:', selectedDashboard);
-                        addChartToDashboard(selectedDashboard, chart);
+                        await addChartToDashboard(selectedDashboard, chart);
                         onClose();
                       } else if (newDashboardName.trim()) {
                         // Create new dashboard and add chart
                         console.log('Creating new dashboard:', newDashboardName.trim());
-                        const newDashboard = createDashboard(newDashboardName.trim());
-                        addChartToDashboard(newDashboard.id, chart);
+                        const newDashboard = await createDashboard(newDashboardName.trim());
+                        await addChartToDashboard(newDashboard.id, chart);
                         onClose();
                       }
                     }}

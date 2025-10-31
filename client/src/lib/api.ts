@@ -6,7 +6,9 @@ import {
   UserAnalysisSessionsResponse,
   CompleteAnalysisData,
   ColumnStatisticsResponse,
-  RawDataResponse
+  RawDataResponse,
+  Dashboard,
+  ChartSpec,
 } from '@shared/schema';
 
 // Base configuration for your backend
@@ -230,3 +232,16 @@ export const sessionsApi = {
 };
 
 export default apiClient;
+
+// Dashboards API
+export const dashboardsApi = {
+  list: () => api.get<{ dashboards: Dashboard[] }>('/api/dashboards'),
+  create: (name: string, charts?: ChartSpec[]) =>
+    api.post<Dashboard>('/api/dashboards', { name, charts }),
+  remove: (dashboardId: string) =>
+    api.delete(`/api/dashboards/${dashboardId}`),
+  addChart: (dashboardId: string, chart: ChartSpec) =>
+    api.post<Dashboard>(`/api/dashboards/${dashboardId}/charts`, { chart }),
+  removeChart: (dashboardId: string, payload: { index?: number; title?: string; type?: ChartSpec['type'] }) =>
+    api.delete<Dashboard>(`/api/dashboards/${dashboardId}/charts`, { data: payload as any }),
+};

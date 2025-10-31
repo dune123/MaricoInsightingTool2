@@ -5,10 +5,10 @@ interface DashboardContextType {
   dashboards: DashboardData[];
   currentDashboard: DashboardData | null;
   setCurrentDashboard: (dashboard: DashboardData | null) => void;
-  createDashboard: (name: string) => DashboardData;
-  addChartToDashboard: (dashboardId: string, chart: any) => void;
-  removeChartFromDashboard: (dashboardId: string, chartIndex: number) => void;
-  deleteDashboard: (dashboardId: string) => void;
+  createDashboard: (name: string) => Promise<DashboardData>;
+  addChartToDashboard: (dashboardId: string, chart: any) => Promise<void>;
+  removeChartFromDashboard: (dashboardId: string, chartIndex: number) => Promise<void>;
+  deleteDashboard: (dashboardId: string) => Promise<void>;
   getDashboardById: (dashboardId: string) => DashboardData | undefined;
 }
 

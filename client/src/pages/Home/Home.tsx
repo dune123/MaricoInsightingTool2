@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { FileUpload } from '@/pages/Home/Components/FileUpload';
 import { ChatInterface } from './Components/ChatInterface';
 import { useHomeState, useHomeMutations, useHomeHandlers } from './modules';
+import { sessionsApi } from '@/lib/api';
 
 interface HomeProps {
   resetTrigger?: number;
@@ -9,6 +10,7 @@ interface HomeProps {
 }
 
 export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps) {
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const {
     sessionId,
     messages,
@@ -57,6 +59,21 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
     resetState,
   });
 
+  const handleLoadHistory = async () => {
+    if (!sessionId || isLoadingHistory) return;
+    setIsLoadingHistory(true);
+    try {
+      const data = await sessionsApi.getSessionDetails(sessionId);
+      if (data && Array.isArray(data.messages)) {
+        setMessages(data.messages as any);
+      }
+    } catch (e) {
+      console.error('Failed to load chat history', e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   // Reset state only when resetTrigger changes (upload new file)
   useEffect(() => {
     if (resetTrigger > 0) {
@@ -64,42 +81,48 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
     }
   }, [resetTrigger, resetState]);
 
-  // Load session data when provided
+  // Load session data when provided (and populate existing chat history)
   useEffect(() => {
-    if (loadedSessionData) {
-      console.log('🔄 Loading session data into Home component:', loadedSessionData);
-      
-      // Extract session data
-      const session = loadedSessionData.session;
-      if (session) {
-        // Set session ID
-        setSessionId(session.sessionId);
-        
-        // Set initial charts and insights
-        setInitialCharts(session.charts || []);
-        setInitialInsights(session.insights || []);
-        
-        // Set data summary information
-        if (session.dataSummary) {
-          setSampleRows(session.sampleRows || []);
-          setColumns(session.dataSummary.columns?.map((c: any) => c.name) || []);
-          setNumericColumns(session.dataSummary.numericColumns || []);
-          setDateColumns(session.dataSummary.dateColumns || []);
-          setTotalRows(session.dataSummary.rowCount || 0);
-          setTotalColumns(session.dataSummary.columnCount || 0);
-        }
-        
-        // Create initial message with loaded data
-        const initialMessage = {
-          role: 'assistant' as const,
-          content: `Welcome back! I've loaded your previous analysis of ${session.fileName}.\n\n📊 ${session.dataSummary?.rowCount || 0} rows and ${session.dataSummary?.columnCount || 0} columns\n🔢 ${session.dataSummary?.numericColumns?.length || 0} numeric columns\n📅 ${session.dataSummary?.dateColumns?.length || 0} date columns\n\nYou can continue asking questions about your data or explore the ${session.charts?.length || 0} charts I generated earlier.`,
-          charts: session.charts || [],
-          insights: session.insights || [],
-          timestamp: Date.now(),
-        };
-        
-        setMessages([initialMessage]);
-      }
+    if (!loadedSessionData) return;
+    console.log('🔄 Loading session data into Home component:', loadedSessionData);
+    const session = loadedSessionData.session;
+    if (!session) return;
+
+    // Set session ID
+    setSessionId(session.sessionId);
+
+    // Set initial charts and insights for the first assistant message context
+    setInitialCharts(session.charts || []);
+    setInitialInsights(session.insights || []);
+
+    // Set data summary information
+    if (session.dataSummary) {
+      setSampleRows(session.sampleRows || []);
+      setColumns(session.dataSummary.columns?.map((c: any) => c.name) || []);
+      setNumericColumns(session.dataSummary.numericColumns || []);
+      setDateColumns(session.dataSummary.dateColumns || []);
+      setTotalRows(session.dataSummary.rowCount || 0);
+      setTotalColumns(session.dataSummary.columnCount || 0);
+    }
+
+    // Build an initial analysis message so the user immediately sees the original charts/insights
+    const initialAnalysisMessage = {
+      role: 'assistant' as const,
+      content: `Initial analysis for ${session.fileName}.`,
+      charts: session.charts || [],
+      insights: session.insights || [],
+      timestamp: Date.now(),
+    };
+
+    // If backend already has messages, prepend the initial analysis snapshot (unless it already exists)
+    if (Array.isArray(session.messages) && session.messages.length > 0) {
+      const existing = session.messages as any[];
+      const hasChartsInFirst = !!(existing[0]?.charts && existing[0].charts.length);
+      const merged = hasChartsInFirst ? existing : [initialAnalysisMessage, ...existing];
+      setMessages(merged as any);
+    } else {
+      // Otherwise show just the initial analysis snapshot
+      setMessages([initialAnalysisMessage] as any);
     }
   }, [loadedSessionData, setSessionId, setInitialCharts, setInitialInsights, setSampleRows, setColumns, setNumericColumns, setDateColumns, setTotalRows, setTotalColumns, setMessages]);
 
@@ -108,6 +131,7 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
       <FileUpload
         onFileSelect={handleFileSelect}
         isUploading={uploadMutation.isPending}
+        autoOpenTrigger={resetTrigger}
       />
     );
   }
@@ -118,6 +142,9 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
       onSendMessage={handleSendMessage}
       onUploadNew={handleUploadNew}
       isLoading={chatMutation.isPending}
+      onLoadHistory={handleLoadHistory}
+      canLoadHistory={!!sessionId}
+      loadingHistory={isLoadingHistory}
       sampleRows={sampleRows}
       columns={columns}
       numericColumns={numericColumns}

@@ -6,8 +6,11 @@ export const chartSpecSchema = z.object({
   title: z.string(),
   x: z.string(),
   y: z.string(),
+  // Optional secondary Y series for dual-axis line charts
+  y2: z.string().optional(),
   xLabel: z.string().optional(),
   yLabel: z.string().optional(),
+  y2Label: z.string().optional(),
   aggregate: z.enum(["sum", "mean", "count", "none"]).optional(),
   data: z.array(z.record(z.union([z.string(), z.number()]))).optional(),
   xDomain: z.tuple([z.number(), z.number()]).optional(), // [min, max] for X-axis
@@ -94,13 +97,26 @@ export const completeAnalysisDataSchema = z.object({
   charts: z.array(chartSpecSchema),
   insights: z.array(insightSchema),
   messages: z.array(messageSchema),
+  
+  // ✅ New nested chat storage format
+  chatThread: z.array(z.object({
+    charts: z.array(z.object({
+      chart: chartSpecSchema,
+      keyInsight: z.string().optional(),
+      recommendation: z.string().optional(),
+    })),
+    messageInsight: z.string().optional(),
+  })).optional(),
+
   blobInfo: z.object({
     blobUrl: z.string(),
     blobName: z.string(),
   }).optional(),
+
   analysisMetadata: analysisMetadataSchema,
   sessionId: z.string(),
 });
+
 
 export type CompleteAnalysisData = z.infer<typeof completeAnalysisDataSchema>;
 
@@ -190,3 +206,32 @@ export interface SessionData {
   fileName: string;
   uploadedAt: number;
 }
+
+// Dashboards
+export const dashboardSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  name: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  charts: z.array(chartSpecSchema),
+});
+
+export type Dashboard = z.infer<typeof dashboardSchema>;
+
+export const createDashboardRequestSchema = z.object({
+  name: z.string().min(1),
+  charts: z.array(chartSpecSchema).optional(),
+});
+
+export const addChartToDashboardRequestSchema = z.object({
+  chart: chartSpecSchema,
+});
+
+export const removeChartFromDashboardRequestSchema = z.object({
+  index: z.number().optional(),
+  title: z.string().optional(),
+  type: z.enum(["line", "bar", "scatter", "pie", "area"]).optional(),
+}).refine((data) => data.index !== undefined || data.title !== undefined || data.type !== undefined, {
+  message: "Provide index or title/type to remove a chart",
+});

@@ -6,6 +6,7 @@ import chatManagementRoutes from "./chatManagement.js";
 import blobStorageRoutes from "./blobStorage.js";
 import sessionRoutes from "./sessions.js";
 import dataRetrievalRoutes from "./dataRetrieval.js";
+import dashboardRoutes from "./dashboards.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Register route modules
@@ -15,6 +16,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api', blobStorageRoutes);
   app.use('/api', sessionRoutes);
   app.use('/api/data', dataRetrievalRoutes);
+  app.use('/api', dashboardRoutes);
 
   const httpServer = createServer(app);
   return httpServer;

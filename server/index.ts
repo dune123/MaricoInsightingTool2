@@ -8,9 +8,9 @@ import { initializeBlobStorage } from "./lib/blobStorage.js";
 
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Middleware (increase payload limits for chat history and chart data)
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: false, limit: '20mb' }));
 
 // Handle preflight requests explicitly
 app.options('*', corsConfig);

@@ -77,6 +77,251 @@ export async function answerQuestion(
   chatHistory: Message[],
   summary: DataSummary
 ): Promise<{ answer: string; charts?: ChartSpec[]; insights?: Insight[] }> {
+  // Utility: parse two-series line intent like "A and B over months" or "A vs B"
+  const detectTwoSeriesLine = (q: string) => {
+    const ql = q.toLowerCase();
+    const mentionsLine = /\bline\b|\bline\s*chart\b|\bover\s+time\b/.test(ql);
+    if (!mentionsLine) return null;
+    // split on ' vs ' or ' and '
+    let parts: string[] = [];
+    if (ql.includes(' vs ')) parts = q.split(/\s+vs\s+/i);
+    else if (ql.includes(' and ')) parts = q.split(/\s+and\s+/i);
+    if (parts.length < 2) return null;
+    // try to pick last two tokens as variables (exclude words like 'over months' etc.)
+    const candidates = parts.map(p => p.replace(/over.*/i,'').replace(/line\s*chart|plot|graph/gi,'').trim()).filter(Boolean);
+    if (candidates.length < 2) return null;
+    const allCols = summary.columns.map(c => c.name);
+    const a = findMatchingColumn(candidates[0], allCols);
+    const b = findMatchingColumn(candidates[1], allCols);
+    if (!a || !b) return null;
+    const aNum = summary.numericColumns.includes(a);
+    const bNum = summary.numericColumns.includes(b);
+    if (!aNum || !bNum) return null;
+    // choose x as first date column or a column named Month if present
+    const x = summary.dateColumns[0] || findMatchingColumn('Month', allCols) || summary.columns[0].name;
+    return { x, y: a, y2: b };
+  };
+
+  // Detect "vs" queries early - when user asks to plot X vs Y (especially with "two separate axes")
+  const detectVsEarly = (q: string): { var1: string | null; var2: string | null } | null => {
+    console.log('🔍 Early vs detection for:', q);
+    const ql = q.toLowerCase();
+    // Look for "vs" in the question, especially with "plot", "two separate axes", etc.
+    if (!ql.includes(' vs ')) {
+      console.log('❌ No "vs" found in question');
+      return null;
+    }
+    
+    const allCols = summary.columns.map(c => c.name);
+    
+    // Match pattern: "plot X vs Y" or "X vs Y on two separate axes" etc.
+    const vsMatch = q.match(/(.+?)\s+vs\s+(.+)/i);
+    if (!vsMatch) {
+      console.log('❌ No vs match pattern found');
+      return null;
+    }
+    
+    let var1Raw = vsMatch[1].trim();
+    let var2Raw = vsMatch[2].trim();
+    
+    console.log('📝 Raw extracted:', { var1Raw, var2Raw });
+    
+    // Clean up variable names
+    var1Raw = var1Raw.replace(/^(?:can\s+you\s+)?(?:plot|graph|chart|show|display)\s+/i, '').trim();
+    var2Raw = var2Raw.replace(/\s+(?:on|with|using|separate|axes|axis|chart|graph|plot).*$/i, '').trim();
+    
+    console.log('🧹 Cleaned variables:', { var1Raw, var2Raw });
+    console.log('📊 Available columns:', allCols);
+    console.log('🔢 Numeric columns:', summary.numericColumns);
+    
+    const var1 = findMatchingColumn(var1Raw, allCols);
+    const var2 = findMatchingColumn(var2Raw, allCols);
+    
+    console.log('🎯 Column matches:', { var1, var2 });
+    
+    if (!var1 || !var2) {
+      console.log('❌ Could not match columns. var1:', var1, 'var2:', var2);
+      return null;
+    }
+    
+    // Check if both are numeric
+    const bothNumeric = summary.numericColumns.includes(var1) && summary.numericColumns.includes(var2);
+    if (!bothNumeric) {
+      console.log('❌ Not both numeric. var1 numeric:', summary.numericColumns.includes(var1), 'var2 numeric:', summary.numericColumns.includes(var2));
+      return null;
+    }
+    
+    console.log('✅ Valid vs query detected early:', { var1, var2 });
+    return { var1, var2 };
+  };
+
+  const vsEarly = detectVsEarly(question);
+  if (vsEarly && vsEarly.var1 && vsEarly.var2) {
+    console.log('🎯 Early vs detection triggered:', vsEarly);
+    
+    // Verify columns exist in data
+    const firstRow = data[0];
+    if (!firstRow) {
+      console.error('❌ No data rows available');
+      return { answer: 'No data available to create charts. Please upload a data file first.' };
+    }
+    
+    if (!firstRow.hasOwnProperty(vsEarly.var1)) {
+      console.error(`❌ Column "${vsEarly.var1}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${vsEarly.var1}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    if (!firstRow.hasOwnProperty(vsEarly.var2)) {
+      console.error(`❌ Column "${vsEarly.var2}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${vsEarly.var2}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    // Determine X-axis for line charts: prefer date column
+    const allCols = summary.columns.map(c => c.name);
+    const lineChartX = summary.dateColumns[0] || 
+                      findMatchingColumn('Month', allCols) || 
+                      findMatchingColumn('Date', allCols) ||
+                      findMatchingColumn('Week', allCols) ||
+                      allCols[0];
+    
+    console.log('📈 Line chart X-axis:', lineChartX);
+    
+    // Create scatter chart spec
+    const scatterSpec: ChartSpec = {
+      type: 'scatter',
+      title: `Scatter Plot of ${vsEarly.var1} vs ${vsEarly.var2}`,
+      x: vsEarly.var1,
+      y: vsEarly.var2,
+      xLabel: vsEarly.var1,
+      yLabel: vsEarly.var2,
+      aggregate: 'none',
+    };
+    
+    // Create TWO separate line charts (one for each variable)
+    const lineSpec1: ChartSpec = {
+      type: 'line',
+      title: `${vsEarly.var1} over ${lineChartX}`,
+      x: lineChartX,
+      y: vsEarly.var1,
+      xLabel: lineChartX,
+      yLabel: vsEarly.var1,
+      aggregate: 'none',
+    };
+    
+    const lineSpec2: ChartSpec = {
+      type: 'line',
+      title: `${vsEarly.var2} over ${lineChartX}`,
+      x: lineChartX,
+      y: vsEarly.var2,
+      xLabel: lineChartX,
+      yLabel: vsEarly.var2,
+      aggregate: 'none',
+    };
+    
+    // Process all charts
+    console.log('🔄 Processing scatter chart data...');
+    const scatterData = processChartData(data, scatterSpec);
+    console.log(`✅ Scatter data: ${scatterData.length} points`);
+    
+    console.log('🔄 Processing line chart 1 data...');
+    const lineData1 = processChartData(data, lineSpec1);
+    console.log(`✅ Line chart 1 data: ${lineData1.length} points`);
+    
+    console.log('🔄 Processing line chart 2 data...');
+    const lineData2 = processChartData(data, lineSpec2);
+    console.log(`✅ Line chart 2 data: ${lineData2.length} points`);
+    
+    if (scatterData.length === 0 && lineData1.length === 0 && lineData2.length === 0) {
+      return { 
+        answer: `No valid data points found. Please check that columns "${vsEarly.var1}" and "${vsEarly.var2}" exist and contain numeric data. Available columns: ${allCols.join(', ')}` 
+      };
+    }
+    
+    const scatterInsights = await generateChartInsights(scatterSpec, scatterData, summary);
+    const lineInsights1 = await generateChartInsights(lineSpec1, lineData1, summary);
+    const lineInsights2 = await generateChartInsights(lineSpec2, lineData2, summary);
+    
+    const charts: ChartSpec[] = [];
+    
+    if (scatterData.length > 0) {
+      charts.push({
+        ...scatterSpec,
+        data: scatterData,
+        keyInsight: scatterInsights.keyInsight,
+        recommendation: scatterInsights.recommendation,
+      });
+    }
+    
+    if (lineData1.length > 0) {
+      charts.push({
+        ...lineSpec1,
+        data: lineData1,
+        keyInsight: lineInsights1.keyInsight,
+        recommendation: lineInsights1.recommendation,
+      });
+    }
+    
+    if (lineData2.length > 0) {
+      charts.push({
+        ...lineSpec2,
+        data: lineData2,
+        keyInsight: lineInsights2.keyInsight,
+        recommendation: lineInsights2.recommendation,
+      });
+    }
+    
+    const answer = `I've created a scatter plot comparing ${vsEarly.var1} and ${vsEarly.var2}, plus two separate line charts showing each variable over ${lineChartX}.`;
+    
+    return { answer, charts };
+  }
+
+  // If question clearly asks for two series line chart, build spec directly
+  const twoSeries = detectTwoSeriesLine(question);
+  if (twoSeries) {
+    const spec: ChartSpec = {
+      type: 'line',
+      title: `${twoSeries.y} and ${twoSeries.y2} over ${twoSeries.x}`,
+      x: twoSeries.x,
+      y: twoSeries.y,
+      y2: twoSeries.y2,
+      xLabel: twoSeries.x,
+      yLabel: twoSeries.y,
+      y2Label: twoSeries.y2,
+      aggregate: 'none',
+    } as any;
+    const processed = processChartData(data, spec);
+    const insights = await generateChartInsights(spec, processed, summary);
+    const chart: ChartSpec = { ...spec, data: processed, keyInsight: insights.keyInsight, recommendation: insights.recommendation };
+    const answer = `Plotted two lines over ${twoSeries.x} with primary Y = ${twoSeries.y} and secondary Y = ${twoSeries.y2}.`;
+    return { answer, charts: [chart] };
+  }
+  // Helper: detect explicit axis assignment like "foo (x-axis)" or "bar (y axis)"
+  const parseExplicitAxes = (q: string): { x?: string; y?: string } => {
+    const result: { x?: string; y?: string } = {};
+    // capture phrases followed by (x-axis|x axis|xaxis) or (y-axis|y axis|yaxis)
+    const axisRegex = /(.*?)\(([^\)]*)\)/g; // greedy left text + parentheses
+    const lower = q.toLowerCase();
+    let m: RegExpExecArray | null;
+    while ((m = axisRegex.exec(q)) !== null) {
+      const rawName = m[1].trim();
+      const axisText = m[2].toLowerCase().replace(/\s+/g, '');
+      if (!rawName) continue;
+      if (axisText.includes('x-axis') || axisText.includes('xaxis') || axisText === 'x') {
+        result.x = rawName;
+      } else if (axisText.includes('y-axis') || axisText.includes('yaxis') || axisText === 'y') {
+        result.y = rawName;
+      }
+    }
+    // Also support formats like "x axis: foo" or "y axis is bar"
+    const xMatch = lower.match(/x\s*-?\s*axis\s*[:=]\s*([^,;\n]+)/);
+    if (xMatch && !result.x) result.x = xMatch[1].trim();
+    const yMatch = lower.match(/y\s*-?\s*axis\s*[:=]\s*([^,;\n]+)/);
+    if (yMatch && !result.y) result.y = yMatch[1].trim();
+    return result;
+  };
+
   // Classify the question
   const allColumns = summary.columns.map(c => c.name);
   const classification = await classifyQuestion(question, summary.numericColumns);
@@ -103,6 +348,10 @@ export async function answerQuestion(
 
     // Check if it's a specific two-variable correlation
     if (classification.specificVariable) {
+      // Check for explicit axis hints in the question
+      const { x: explicitXRaw, y: explicitYRaw } = parseExplicitAxes(question);
+      const explicitX = explicitXRaw ? findMatchingColumn(explicitXRaw, allColumns) : null;
+      const explicitY = explicitYRaw ? findMatchingColumn(explicitYRaw, allColumns) : null;
       const specificCol = findMatchingColumn(classification.specificVariable, allColumns);
       console.log(`Specific column match: "${classification.specificVariable}" -> "${specificCol}"`);
       
@@ -125,43 +374,51 @@ export async function answerQuestion(
 
       // Handle different combinations of numeric/categorical
       if (targetIsNumeric && specificIsNumeric) {
+        // Respect explicit axis mapping if provided
+        const xVar = explicitX && (explicitX === specificCol || explicitX === targetCol)
+          ? explicitX
+          : specificCol; // default X = specific variable
+        const yVar = explicitY && (explicitY === specificCol || explicitY === targetCol)
+          ? explicitY
+          : targetCol; // default Y = target variable
+
         // Both numeric: Use correlation analysis
         const { charts, insights } = await analyzeCorrelations(
           data,
-          targetCol,
-          [specificCol]
+          yVar,
+          [xVar]
         );
-        const answer = `I've analyzed the correlation between ${specificCol} and ${targetCol}. The scatter plot shows the relationship between these two variables, and the analysis reveals the strength and direction of their correlation.`;
+        const answer = `I've analyzed the correlation between ${specificCol} and ${targetCol}. The scatter plot is oriented with X = ${xVar} and Y = ${yVar} as requested.`;
         return { answer, charts, insights };
       } else if (targetIsNumeric && !specificIsNumeric) {
         // Categorical vs Numeric: Create bar chart
         const chartSpec: ChartSpec = {
           type: 'bar',
-          title: `${targetCol} by ${specificCol}`,
-          x: specificCol,
-          y: targetCol,
+          title: `${explicitY ? explicitY : targetCol} by ${explicitX ? explicitX : specificCol}`,
+          x: explicitX || specificCol,
+          y: explicitY || targetCol,
           aggregate: 'mean',
         };
         const charts = [{
           ...chartSpec,
           data: processChartData(data, chartSpec),
         }];
-        const answer = `I've created a bar chart showing how ${targetCol} varies across different ${specificCol} categories. The chart displays the average ${targetCol} for each category.`;
+        const answer = `I've created a bar chart showing how ${chartSpec.y} varies across ${chartSpec.x} categories (X=${chartSpec.x}, Y=${chartSpec.y}).`;
         return { answer, charts };
       } else if (!targetIsNumeric && specificIsNumeric) {
         // Numeric vs Categorical: Create bar chart (swap axes)
         const chartSpec: ChartSpec = {
           type: 'bar',
-          title: `${specificCol} by ${targetCol}`,
-          x: targetCol,
-          y: specificCol,
+          title: `${explicitY ? explicitY : specificCol} by ${explicitX ? explicitX : targetCol}`,
+          x: explicitX || targetCol,
+          y: explicitY || specificCol,
           aggregate: 'mean',
         };
         const charts = [{
           ...chartSpec,
           data: processChartData(data, chartSpec),
         }];
-        const answer = `I've created a bar chart showing how ${specificCol} varies across different ${targetCol} categories. The chart displays the average ${specificCol} for each category.`;
+        const answer = `I've created a bar chart showing how ${chartSpec.y} varies across ${chartSpec.x} categories (X=${chartSpec.x}, Y=${chartSpec.y}).`;
         return { answer, charts };
       } else {
         // Both categorical: Cannot analyze relationship numerically
@@ -589,6 +846,189 @@ async function generateGeneralAnswer(
   chatHistory: Message[],
   summary: DataSummary
 ): Promise<{ answer: string; charts?: ChartSpec[]; insights?: Insight[] }> {
+  // Detect explicit axis hints for any chart request
+  const parseExplicitAxes = (q: string): { x?: string; y?: string } => {
+    const result: { x?: string; y?: string } = {};
+    const axisRegex = /(.*?)\(([^\)]*)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = axisRegex.exec(q)) !== null) {
+      const rawName = m[1].trim();
+      const axisText = m[2].toLowerCase().replace(/\s+/g, '');
+      if (!rawName) continue;
+      if (axisText.includes('x-axis') || axisText.includes('xaxis') || axisText === 'x') {
+        result.x = rawName;
+      } else if (axisText.includes('y-axis') || axisText.includes('yaxis') || axisText === 'y') {
+        result.y = rawName;
+      }
+    }
+    const lower = q.toLowerCase();
+    const xMatch = lower.match(/x\s*-?\s*axis\s*[:=]\s*([^,;\n]+)/);
+    if (xMatch && !result.x) result.x = xMatch[1].trim();
+    const yMatch = lower.match(/y\s*-?\s*axis\s*[:=]\s*([^,;\n]+)/);
+    if (yMatch && !result.y) result.y = yMatch[1].trim();
+    return result;
+  };
+
+  const { x: explicitXRaw, y: explicitYRaw } = parseExplicitAxes(question);
+  const availableColumns = summary.columns.map(c => c.name);
+  const explicitX = explicitXRaw ? findMatchingColumn(explicitXRaw, availableColumns) : null;
+  const explicitY = explicitYRaw ? findMatchingColumn(explicitYRaw, availableColumns) : null;
+
+  // Detect "vs" queries for two numeric variables - generate both scatter and line charts
+  const detectVsQuery = (q: string): { var1: string | null; var2: string | null } | null => {
+    console.log('🔍 Detecting vs query in:', q);
+    
+    // Match text before and after "vs" - capture everything up to the end or common stopping words
+    const vsMatch = q.match(/(.+?)\s+vs\s+(.+?)(?:\s+on\s+|$)/i) ||
+                   q.match(/(.+?)\s+vs\s+(.+)/i);
+    
+    if (!vsMatch) {
+      console.log('❌ No vs match found');
+      return null;
+    }
+    
+    let var1Raw = vsMatch[1].trim();
+    let var2Raw = vsMatch[2].trim();
+    
+    console.log('📝 Raw variables:', { var1Raw, var2Raw });
+    
+    // Remove common chart-related words from the beginning of var1
+    var1Raw = var1Raw.replace(/^(?:can\s+you\s+)?(?:plot|graph|chart|show|display)\s+/i, '').trim();
+    
+    // Remove trailing words like "on two separate axes" from var2
+    var2Raw = var2Raw.replace(/\s+(?:on|with|using|separate|axes|axis|chart|graph|plot).*$/i, '').trim();
+    
+    console.log('🧹 Cleaned variables:', { var1Raw, var2Raw });
+    console.log('📊 Available columns:', availableColumns);
+    console.log('🔢 Numeric columns:', summary.numericColumns);
+    
+    // Try to find matching columns - be flexible with matching
+    const var1 = findMatchingColumn(var1Raw, availableColumns);
+    const var2 = findMatchingColumn(var2Raw, availableColumns);
+    
+    console.log('🎯 Matched columns:', { var1, var2 });
+    
+    if (!var1 || !var2) {
+      console.log('❌ Could not match columns');
+      return null;
+    }
+    
+    // Check if both are numeric
+    const bothNumeric = summary.numericColumns.includes(var1) && summary.numericColumns.includes(var2);
+    if (!bothNumeric) {
+      console.log('❌ Not both numeric. var1 numeric:', summary.numericColumns.includes(var1), 'var2 numeric:', summary.numericColumns.includes(var2));
+      return null;
+    }
+    
+    console.log('✅ Valid vs query detected:', { var1, var2 });
+    return { var1, var2 };
+  };
+
+  const vsQuery = detectVsQuery(question);
+  
+  // If "vs" query detected with two numeric variables, generate both scatter and line charts
+  if (vsQuery && vsQuery.var1 && vsQuery.var2) {
+    console.log('🚀 Processing vs query with variables:', vsQuery);
+    
+    // Verify columns exist in data
+    const firstRow = data[0];
+    if (!firstRow) {
+      console.error('❌ No data rows available');
+      return { answer: 'No data available to create charts. Please upload a data file first.' };
+    }
+    
+    if (!firstRow.hasOwnProperty(vsQuery.var1)) {
+      console.error(`❌ Column "${vsQuery.var1}" not found in data`);
+      return { answer: `Column "${vsQuery.var1}" not found in the data. Available columns: ${availableColumns.join(', ')}` };
+    }
+    
+    if (!firstRow.hasOwnProperty(vsQuery.var2)) {
+      console.error(`❌ Column "${vsQuery.var2}" not found in data`);
+      return { answer: `Column "${vsQuery.var2}" not found in the data. Available columns: ${availableColumns.join(', ')}` };
+    }
+    
+    // Determine X-axis for line chart: prefer date column, otherwise use index or first variable
+    const lineChartX = summary.dateColumns[0] || 
+                      findMatchingColumn('Month', availableColumns) || 
+                      findMatchingColumn('Date', availableColumns) ||
+                      findMatchingColumn('Week', availableColumns) ||
+                      availableColumns[0]; // fallback to first column
+    
+    console.log('📈 Line chart X-axis:', lineChartX);
+    
+    // Use explicit axes if provided, otherwise use detected variables
+    const scatterX = explicitX || vsQuery.var1;
+    const scatterY = explicitY || vsQuery.var2;
+    
+    console.log('📊 Scatter chart axes:', { scatterX, scatterY });
+    
+    // Create scatter chart spec
+    const scatterSpec: ChartSpec = {
+      type: 'scatter',
+      title: `Scatter Plot of ${scatterX} vs ${scatterY}`,
+      x: scatterX,
+      y: scatterY,
+      xLabel: scatterX,
+      yLabel: scatterY,
+      aggregate: 'none',
+    };
+    
+    // Create line chart spec (dual Y-axis)
+    const lineSpec: ChartSpec = {
+      type: 'line',
+      title: `${vsQuery.var1} and ${vsQuery.var2} over ${lineChartX}`,
+      x: lineChartX,
+      y: vsQuery.var1,
+      y2: vsQuery.var2,
+      xLabel: lineChartX,
+      yLabel: vsQuery.var1,
+      y2Label: vsQuery.var2,
+      aggregate: 'none',
+    };
+    
+    // Process both charts
+    console.log('🔄 Processing scatter chart data...');
+    const scatterData = processChartData(data, scatterSpec);
+    console.log(`✅ Scatter data: ${scatterData.length} points`);
+    
+    console.log('🔄 Processing line chart data...');
+    const lineData = processChartData(data, lineSpec);
+    console.log(`✅ Line data: ${lineData.length} points`);
+    
+    if (scatterData.length === 0) {
+      console.error('❌ Scatter chart has no data');
+      return { answer: `No valid data points found for scatter plot. Please check that columns "${scatterX}" and "${scatterY}" contain numeric data.` };
+    }
+    
+    if (lineData.length === 0) {
+      console.error('❌ Line chart has no data');
+      return { answer: `No valid data points found for line chart. Please check that columns "${vsQuery.var1}" and "${vsQuery.var2}" contain numeric data.` };
+    }
+    
+    const scatterInsights = await generateChartInsights(scatterSpec, scatterData, summary);
+    const lineInsights = await generateChartInsights(lineSpec, lineData, summary);
+    
+    const charts: ChartSpec[] = [
+      {
+        ...scatterSpec,
+        data: scatterData,
+        keyInsight: scatterInsights.keyInsight,
+        recommendation: scatterInsights.recommendation,
+      },
+      {
+        ...lineSpec,
+        data: lineData,
+        keyInsight: lineInsights.keyInsight,
+        recommendation: lineInsights.recommendation,
+      },
+    ];
+    
+    console.log('✅ Successfully created both charts');
+    const answer = `I've created both a scatter plot and a line chart comparing ${vsQuery.var1} and ${vsQuery.var2}. The scatter plot shows the relationship between the two variables, while the line chart shows their trends over ${lineChartX}.`;
+    
+    return { answer, charts };
+  }
+
   const historyContext = chatHistory
     .slice(-4)
     .map((msg) => `${msg.role}: ${msg.content}`)
@@ -663,11 +1103,15 @@ Output JSON:
         if (typeof x === 'object' && x !== null) x = x.name || x.value || String(x);
         if (typeof y === 'object' && y !== null) y = y.name || y.value || String(y);
         
+        // Apply explicit axis overrides from the question if provided
+        const finalX = explicitX || String(x || '');
+        const finalY = explicitY || String(y || '');
+
         return {
           type: spec.type,
           title: spec.title || 'Chart',
-          x: String(x || ''),
-          y: String(y || ''),
+          x: finalX,
+          y: finalY,
           aggregate: spec.aggregate || 'none',
         };
       }).filter((spec: any) => 
@@ -690,12 +1134,61 @@ Output JSON:
       }));
       
       console.log('Chat charts generated:', processedCharts?.length || 0);
+
+      // If user asked explicitly for one line chart with two variables, merge first two line charts sharing same X
+      const wantsSingleCombined = /\b(one|single)\s+line\s*chart\b|\bin\s+one\s+chart\b|\btogether\b/i.test(question);
+      if (wantsSingleCombined && processedCharts && processedCharts.length >= 2) {
+        const c1 = processedCharts.find(c => c.type === 'line' && Array.isArray(c.data));
+        const c2 = processedCharts.find(c => c !== c1 && c.type === 'line' && Array.isArray(c.data));
+        if (c1 && c2 && c1.x === c2.x) {
+          // Build map from X to values for both series
+          const xKey = c1.x;
+          const y1Key = c1.y;
+          const y2Key = c2.y;
+          const map = new Map<string | number, any>();
+          (c1.data as any[]).forEach(row => {
+            const k = row[xKey];
+            map.set(k, { [xKey]: k, [y1Key]: row[y1Key] });
+          });
+          (c2.data as any[]).forEach(row => {
+            const k = row[xKey];
+            const existing = map.get(k) || { [xKey]: k };
+            existing[y2Key] = row[y2Key];
+            map.set(k, existing);
+          });
+          const mergedData = Array.from(map.values()).sort((a, b) => String(a[xKey]).localeCompare(String(b[xKey])));
+          const merged: ChartSpec = {
+            type: 'line',
+            title: c1.title || `${y1Key} and ${y2Key} over ${xKey}`,
+            x: xKey,
+            y: y1Key,
+            y2: y2Key,
+            xLabel: c1.xLabel || xKey,
+            yLabel: c1.yLabel || y1Key,
+            y2Label: c2.yLabel || y2Key,
+            aggregate: 'none',
+            data: mergedData,
+            keyInsight: c1.keyInsight,
+            recommendation: c1.recommendation,
+          } as any;
+          // Replace charts with single merged one
+          processedCharts = [merged];
+        }
+      }
+    }
+
+    // Always provide chat-level insights: prefer model's, else derive from charts
+    let overallInsights = Array.isArray(result.insights) ? result.insights : undefined;
+    if ((!overallInsights || overallInsights.length === 0) && Array.isArray(processedCharts) && processedCharts.length > 0) {
+      overallInsights = processedCharts
+        .map((c, idx) => (c.keyInsight ? { id: idx + 1, text: c.keyInsight! } : null))
+        .filter(Boolean) as any;
     }
 
     return {
       answer: result.answer,
       charts: processedCharts,
-      insights: undefined,
+      insights: overallInsights,
     };
   } catch {
     return { answer: 'I apologize, but I had trouble processing your question. Please try rephrasing it.' };
