@@ -78,27 +78,75 @@ export async function answerQuestion(
   summary: DataSummary
 ): Promise<{ answer: string; charts?: ChartSpec[]; insights?: Insight[] }> {
   // Utility: parse two-series line intent like "A and B over months" or "A vs B"
+  // This should be checked FIRST for "and" queries, before detectVsEarly
   const detectTwoSeriesLine = (q: string) => {
+    console.log('🔍 detectTwoSeriesLine - checking query:', q);
     const ql = q.toLowerCase();
-    const mentionsLine = /\bline\b|\bline\s*chart\b|\bover\s+time\b/.test(ql);
-    if (!mentionsLine) return null;
+    // More flexible detection: look for "and" or "vs" with mention of line chart, plot, or "over months/time"
+    const mentionsLine = /\bline\b|\bline\s*chart\b|\bover\s+(?:time|months?|weeks?|days?)\b|\bplot\b|\bgraph\b/.test(ql);
+    
+    // Also check if it mentions two variables (check for common patterns)
+    const hasAnd = /\sand\s+/.test(ql);
+    const hasVs = /\s+vs\s+/.test(ql);
+    
+    // Check for "two separate axes" which indicates dual-axis line chart
+    const wantsDualAxis = /\b(two\s+separates?\s+axes?|separates?\s+axes?|dual\s+axis|dual\s+y)\b/i.test(q);
+    
+    console.log('🔍 detectTwoSeriesLine - flags:', { mentionsLine, hasAnd, hasVs, wantsDualAxis });
+    
+    // If it mentions "and" or "vs" with plot/chart keywords, OR if it explicitly wants dual axes, proceed
+    if (!mentionsLine && !hasAnd && !hasVs && !wantsDualAxis) {
+      console.log('❌ detectTwoSeriesLine - does not match criteria');
+      return null;
+    }
+    
     // split on ' vs ' or ' and '
     let parts: string[] = [];
     if (ql.includes(' vs ')) parts = q.split(/\s+vs\s+/i);
     else if (ql.includes(' and ')) parts = q.split(/\s+and\s+/i);
+    
     if (parts.length < 2) return null;
-    // try to pick last two tokens as variables (exclude words like 'over months' etc.)
-    const candidates = parts.map(p => p.replace(/over.*/i,'').replace(/line\s*chart|plot|graph/gi,'').trim()).filter(Boolean);
+    
+    // Clean up parts: remove chart-related words and "over months" phrases
+    // Also handle "on two separate axes" (including typo "separates")
+    const candidates = parts.map(p => 
+      p.replace(/over\s+(?:time|months?|weeks?|days?|.*)/i, '')
+       .replace(/\b(line\s*chart|plot|graph|show|display|create)\b/gi, '')
+       .replace(/\bon\s+(?:two\s+)?(?:separates?\s+)?axes?\b/gi, '')  // Fixed: added 's?' to handle "separates"
+       .replace(/\s+axes?\s*$/i, '')  // Remove trailing "axes"
+       .trim()
+    ).filter(Boolean);
+    
     if (candidates.length < 2) return null;
+    
     const allCols = summary.columns.map(c => c.name);
     const a = findMatchingColumn(candidates[0], allCols);
     const b = findMatchingColumn(candidates[1], allCols);
-    if (!a || !b) return null;
+    
+    console.log('🔍 detectTwoSeriesLine - candidates:', candidates);
+    console.log('🔍 detectTwoSeriesLine - matched columns:', { a, b });
+    
+    if (!a || !b) {
+      console.log('❌ detectTwoSeriesLine - could not match columns');
+      return null;
+    }
+    
     const aNum = summary.numericColumns.includes(a);
     const bNum = summary.numericColumns.includes(b);
-    if (!aNum || !bNum) return null;
-    // choose x as first date column or a column named Month if present
-    const x = summary.dateColumns[0] || findMatchingColumn('Month', allCols) || summary.columns[0].name;
+    
+    if (!aNum || !bNum) {
+      console.log('❌ detectTwoSeriesLine - columns not both numeric');
+      return null;
+    }
+    
+    // Choose x as first date column or a column named Month/Date/Week if present
+    const x = summary.dateColumns[0] || 
+              findMatchingColumn('Month', allCols) || 
+              findMatchingColumn('Date', allCols) ||
+              findMatchingColumn('Week', allCols) ||
+              summary.columns[0].name;
+    
+    console.log('✅ detectTwoSeriesLine - detected:', { x, y: a, y2: b });
     return { x, y: a, y2: b };
   };
 
@@ -155,9 +203,82 @@ export async function answerQuestion(
     return { var1, var2 };
   };
 
+  // Check for two-series line chart FIRST (handles "and" queries)
+  console.log('🔍 Starting detection for question:', question);
+  const twoSeries = detectTwoSeriesLine(question);
+  if (twoSeries) {
+    console.log('✅ detectTwoSeriesLine matched! Result:', twoSeries);
+    
+    // Verify columns exist in data
+    const firstRow = data[0];
+    if (!firstRow) {
+      console.error('❌ No data rows available');
+      return { answer: 'No data available to create charts. Please upload a data file first.' };
+    }
+    
+    if (!firstRow.hasOwnProperty(twoSeries.y)) {
+      console.error(`❌ Column "${twoSeries.y}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${twoSeries.y}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    if (!firstRow.hasOwnProperty(twoSeries.y2)) {
+      console.error(`❌ Column "${twoSeries.y2}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${twoSeries.y2}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    // Check for explicit "two separate axes" request
+    const wantsDualAxis = /\b(two\s+separates?\s+axes?|separates?\s+axes?|dual\s+axis|dual\s+y)\b/i.test(question);
+    
+    // For "A and B over months" or "A and B on two separate axes", always create dual-axis line chart
+    const spec: ChartSpec = {
+      type: 'line',
+      title: `${twoSeries.y} and ${twoSeries.y2} over ${twoSeries.x}`,
+      x: twoSeries.x,
+      y: twoSeries.y,
+      y2: twoSeries.y2,
+      xLabel: twoSeries.x,
+      yLabel: twoSeries.y,
+      y2Label: twoSeries.y2,
+      aggregate: 'none',
+    } as any;
+    
+    console.log('🔄 Processing dual-axis line chart data...');
+    const processed = processChartData(data, spec);
+    console.log(`✅ Dual-axis line data: ${processed.length} points`);
+    
+    if (processed.length === 0) {
+      const allCols = summary.columns.map(c => c.name);
+      return { 
+        answer: `No valid data points found. Please check that columns "${twoSeries.y}" and "${twoSeries.y2}" exist and contain numeric data. Available columns: ${allCols.join(', ')}` 
+      };
+    }
+    
+    const insights = await generateChartInsights(spec, processed, summary);
+    const chart: ChartSpec = { 
+      ...spec, 
+      data: processed, 
+      keyInsight: insights.keyInsight, 
+      recommendation: insights.recommendation 
+    };
+    
+    const answer = wantsDualAxis 
+      ? `I've created a line chart with ${twoSeries.y} on the left axis and ${twoSeries.y2} on the right axis, plotted over ${twoSeries.x}.`
+      : `Plotted two lines over ${twoSeries.x} with ${twoSeries.y} on the left axis and ${twoSeries.y2} on the right axis.`;
+    
+    return { answer, charts: [chart] };
+  }
+
+  // Then check for "vs" queries (for scatter plots and comparisons)
   const vsEarly = detectVsEarly(question);
   if (vsEarly && vsEarly.var1 && vsEarly.var2) {
     console.log('🎯 Early vs detection triggered:', vsEarly);
+    
+    // Check if user wants "two separate axes" (dual-axis line chart) or just a comparison
+    // Also handle typo "separates axes"
+    const wantsDualAxis = /\b(two\s+separates?\s+axes?|separates?\s+axes?|dual\s+axis|dual\s+y)\b/i.test(question);
+    const wantsLineChart = /\b(line\s*chart|plot|graph)\b/i.test(question);
     
     // Verify columns exist in data
     const firstRow = data[0];
@@ -187,8 +308,47 @@ export async function answerQuestion(
                       allCols[0];
     
     console.log('📈 Line chart X-axis:', lineChartX);
+    console.log('📊 Wants dual axis:', wantsDualAxis, 'Wants line chart:', wantsLineChart);
     
-    // Create scatter chart spec
+    // If user wants dual-axis line chart, create one line chart with y and y2
+    if (wantsDualAxis || wantsLineChart) {
+      const dualAxisLineSpec: ChartSpec = {
+        type: 'line',
+        title: `${vsEarly.var1} and ${vsEarly.var2} over ${lineChartX}`,
+        x: lineChartX,
+        y: vsEarly.var1,
+        y2: vsEarly.var2,
+        xLabel: lineChartX,
+        yLabel: vsEarly.var1,
+        y2Label: vsEarly.var2,
+        aggregate: 'none',
+      };
+      
+      console.log('🔄 Processing dual-axis line chart data...');
+      const dualAxisLineData = processChartData(data, dualAxisLineSpec);
+      console.log(`✅ Dual-axis line data: ${dualAxisLineData.length} points`);
+      
+      if (dualAxisLineData.length === 0) {
+        return { 
+          answer: `No valid data points found. Please check that columns "${vsEarly.var1}" and "${vsEarly.var2}" exist and contain numeric data. Available columns: ${allCols.join(', ')}` 
+        };
+      }
+      
+      const dualAxisInsights = await generateChartInsights(dualAxisLineSpec, dualAxisLineData, summary);
+      
+      const charts: ChartSpec[] = [{
+        ...dualAxisLineSpec,
+        data: dualAxisLineData,
+        keyInsight: dualAxisInsights.keyInsight,
+        recommendation: dualAxisInsights.recommendation,
+      }];
+      
+      const answer = `I've created a line chart with ${vsEarly.var1} on the left axis and ${vsEarly.var2} on the right axis, plotted over ${lineChartX}.`;
+      
+      return { answer, charts };
+    }
+    
+    // Otherwise, create scatter plot and two separate line charts (original behavior)
     const scatterSpec: ChartSpec = {
       type: 'scatter',
       title: `Scatter Plot of ${vsEarly.var1} vs ${vsEarly.var2}`,
@@ -275,27 +435,6 @@ export async function answerQuestion(
     const answer = `I've created a scatter plot comparing ${vsEarly.var1} and ${vsEarly.var2}, plus two separate line charts showing each variable over ${lineChartX}.`;
     
     return { answer, charts };
-  }
-
-  // If question clearly asks for two series line chart, build spec directly
-  const twoSeries = detectTwoSeriesLine(question);
-  if (twoSeries) {
-    const spec: ChartSpec = {
-      type: 'line',
-      title: `${twoSeries.y} and ${twoSeries.y2} over ${twoSeries.x}`,
-      x: twoSeries.x,
-      y: twoSeries.y,
-      y2: twoSeries.y2,
-      xLabel: twoSeries.x,
-      yLabel: twoSeries.y,
-      y2Label: twoSeries.y2,
-      aggregate: 'none',
-    } as any;
-    const processed = processChartData(data, spec);
-    const insights = await generateChartInsights(spec, processed, summary);
-    const chart: ChartSpec = { ...spec, data: processed, keyInsight: insights.keyInsight, recommendation: insights.recommendation };
-    const answer = `Plotted two lines over ${twoSeries.x} with primary Y = ${twoSeries.y} and secondary Y = ${twoSeries.y2}.`;
-    return { answer, charts: [chart] };
   }
   // Helper: detect explicit axis assignment like "foo (x-axis)" or "bar (y axis)"
   const parseExplicitAxes = (q: string): { x?: string; y?: string } => {
@@ -923,6 +1062,109 @@ async function generateGeneralAnswer(
     console.log('✅ Valid vs query detected:', { var1, var2 });
     return { var1, var2 };
   };
+
+  // Also check for "and" queries in generateGeneralAnswer (fallback if detectTwoSeriesLine didn't catch it)
+  const detectAndQuery = (q: string): { var1: string | null; var2: string | null } | null => {
+    console.log('🔍 Detecting "and" query in generateGeneralAnswer:', q);
+    const ql = q.toLowerCase();
+    
+    // Must have "and" 
+    if (!ql.includes(' and ')) {
+      console.log('❌ No "and" found');
+      return null;
+    }
+    
+    // Check for "two separate axes" or "plot" or "line chart" to distinguish from other uses of "and"
+    const wantsChart = /\b(two\s+separates?\s+axes?|separates?\s+axes?|dual\s+axis|plot|graph|chart|line)\b/i.test(q);
+    if (!wantsChart) {
+      console.log('❌ Does not want chart');
+      return null;
+    }
+    
+    const andMatch = q.match(/(.+?)\s+and\s+(.+)/i);
+    if (!andMatch) {
+      console.log('❌ No and match pattern found');
+      return null;
+    }
+    
+    let var1Raw = andMatch[1].trim();
+    let var2Raw = andMatch[2].trim();
+    
+    // Clean up
+    var1Raw = var1Raw.replace(/^(?:can\s+you\s+)?(?:plot|graph|chart|show|display)\s+/i, '').trim();
+    var2Raw = var2Raw.replace(/\s+(?:on|with|using|separate|axes|axis|chart|graph|plot|over.*).*$/i, '').trim();
+    
+    console.log('📝 Cleaned "and" variables:', { var1Raw, var2Raw });
+    
+    const var1 = findMatchingColumn(var1Raw, availableColumns);
+    const var2 = findMatchingColumn(var2Raw, availableColumns);
+    
+    console.log('🎯 Matched "and" columns:', { var1, var2 });
+    
+    if (!var1 || !var2) {
+      console.log('❌ Could not match "and" columns');
+      return null;
+    }
+    
+    const bothNumeric = summary.numericColumns.includes(var1) && summary.numericColumns.includes(var2);
+    if (!bothNumeric) {
+      console.log('❌ "And" columns not both numeric');
+      return null;
+    }
+    
+    console.log('✅ Valid "and" query detected:', { var1, var2 });
+    return { var1, var2 };
+  };
+
+  const andQuery = detectAndQuery(question);
+  if (andQuery && andQuery.var1 && andQuery.var2) {
+    console.log('🚀 Processing "and" query with dual-axis line chart:', andQuery);
+    
+    // Determine X-axis for line chart
+    const lineChartX = summary.dateColumns[0] || 
+                      findMatchingColumn('Month', availableColumns) || 
+                      findMatchingColumn('Date', availableColumns) ||
+                      findMatchingColumn('Week', availableColumns) ||
+                      availableColumns[0];
+    
+    const wantsDualAxis = /\b(two\s+separates?\s+axes?|separates?\s+axes?|dual\s+axis)\b/i.test(question);
+    
+    // Create dual-axis line chart
+    const lineSpec: ChartSpec = {
+      type: 'line',
+      title: `${andQuery.var1} and ${andQuery.var2} over ${lineChartX}`,
+      x: lineChartX,
+      y: andQuery.var1,
+      y2: andQuery.var2,
+      xLabel: lineChartX,
+      yLabel: andQuery.var1,
+      y2Label: andQuery.var2,
+      aggregate: 'none',
+    };
+    
+    console.log('🔄 Processing dual-axis line chart data...');
+    const lineData = processChartData(data, lineSpec);
+    console.log(`✅ Dual-axis line data: ${lineData.length} points`);
+    
+    if (lineData.length === 0) {
+      return { answer: `No valid data points found for line chart. Please check that columns "${andQuery.var1}" and "${andQuery.var2}" contain numeric data.` };
+    }
+    
+    const lineInsights = await generateChartInsights(lineSpec, lineData, summary);
+    
+    const charts: ChartSpec[] = [{
+      ...lineSpec,
+      data: lineData,
+      keyInsight: lineInsights.keyInsight,
+      recommendation: lineInsights.recommendation,
+    }];
+    
+    const answer = wantsDualAxis
+      ? `I've created a line chart with ${andQuery.var1} on the left axis and ${andQuery.var2} on the right axis, plotted over ${lineChartX}.`
+      : `I've created a line chart showing ${andQuery.var1} and ${andQuery.var2} over ${lineChartX}.`;
+    
+    return { answer, charts };
+  }
 
   const vsQuery = detectVsQuery(question);
   
