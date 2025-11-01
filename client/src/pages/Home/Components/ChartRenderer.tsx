@@ -67,7 +67,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
-            <LineChart data={data} margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
+            <LineChart data={data} margin={{ left: 50, right: 50, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -82,7 +82,18 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 width={60}
                 tickFormatter={formatAxisLabel}
                 label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
+                yAxisId="left"
               />
+              {chart.y2 && (
+                <YAxis
+                  orientation="right"
+                  yAxisId="right"
+                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                  width={60}
+                  tickFormatter={formatAxisLabel}
+                  label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
+                />
+              )}
               <Tooltip />
               <Line
                 type="monotone"
@@ -91,7 +102,19 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
+                yAxisId="left"
               />
+              {chart.y2 && (
+                <Line
+                  type="monotone"
+                  dataKey={chart.y2 as string}
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  yAxisId="right"
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         );
@@ -202,7 +225,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                   type="linear"
                   dataKey={y}
                   data={trendlineData}
-                  stroke="#ef4444"
+                  stroke="#3b82f6"
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}
@@ -307,11 +330,11 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
           chart={chart}
         />
       ) : (
-        <ChartModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          chart={chart}
-        />
+      <ChartModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        chart={chart}
+      />
       )}
       <DashboardModal
         isOpen={isDashboardModalOpen}

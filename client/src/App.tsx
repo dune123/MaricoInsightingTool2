@@ -55,7 +55,7 @@ function Router() {
           <Dashboard />
         </div>
         <div className={currentPage === 'analysis' ? 'block' : 'hidden'}>
-          <Analysis onNavigate={handleNavigate} onNewChat={handleNewChat} onLoadSession={handleLoadSession} />
+          <Analysis onNavigate={handleNavigate} onNewChat={handleNewChat} onLoadSession={handleLoadSession} onUploadNew={handleUploadNew} />
         </div>
       </>
     );

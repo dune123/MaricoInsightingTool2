@@ -31,9 +31,10 @@ interface AnalysisProps {
   onNavigate?: (page: 'home' | 'dashboard' | 'analysis') => void;
   onNewChat?: () => void;
   onLoadSession?: (sessionId: string, sessionData: any) => void;
+  onUploadNew?: () => void;
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ onNavigate, onNewChat, onLoadSession }) => {
+const Analysis: React.FC<AnalysisProps> = ({ onNavigate, onNewChat, onLoadSession, onUploadNew }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredSessions, setFilteredSessions] = useState<Session[]>([]);
   const { toast } = useToast();
@@ -111,15 +112,14 @@ const Analysis: React.FC<AnalysisProps> = ({ onNavigate, onNewChat, onLoadSessio
 
   // Handle new chat
   const handleNewChat = () => {
-    if (onNewChat) {
+    if (onUploadNew) {
+      onUploadNew();
+    } else if (onNewChat) {
       onNewChat();
     } else if (onNavigate) {
       onNavigate('home');
     } else {
-      toast({
-        title: 'New Analysis',
-        description: 'Starting a new analysis session',
-      });
+      toast({ title: 'New Analysis', description: 'Starting a new analysis session' });
     }
   };
 

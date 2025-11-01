@@ -11,7 +11,7 @@ export function processChartData(
   data: Record<string, any>[],
   chartSpec: ChartSpec
 ): Record<string, any>[] {
-  const { type, x, y, aggregate = 'none' } = chartSpec;
+  const { type, x, y, y2, aggregate = 'none' } = chartSpec;
   
   console.log(`🔍 Processing chart: "${chartSpec.title}"`);
   console.log(`   Type: ${type}, X: "${x}", Y: "${y}", Aggregate: ${aggregate}`);
@@ -45,6 +45,10 @@ export function processChartData(
     console.warn(`❌ Column "${y}" not found in data for chart: ${chartSpec.title}`);
     console.log(`   Available columns: [${availableColumns.join(', ')}]`);
     return [];
+  }
+  // Optional secondary series existence check (for dual-axis line charts)
+  if (y2 && !firstRow.hasOwnProperty(y2)) {
+    console.warn(`❌ Column "${y2}" not found in data for secondary series of chart: ${chartSpec.title}`);
   }
   
   // Check for valid data in the columns
@@ -168,8 +172,9 @@ export function processChartData(
       .map((row) => ({
         [x]: row[x],
         [y]: toNumber(row[y]),
+        ...(y2 ? { [y2]: toNumber(row[y2]) } : {}),
       }))
-      .filter((row) => !isNaN(row[y])) // Filter out NaN values
+      .filter((row) => !isNaN(row[y]) && (!y2 || !isNaN(row[y2 as string])))
       .sort((a, b) => String(a[x]).localeCompare(String(b[x])));
     
     console.log(`   ${type} chart result: ${result.length} points`);

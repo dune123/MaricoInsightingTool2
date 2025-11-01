@@ -223,7 +223,7 @@ export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) 
                   type="linear"
                   dataKey={y}
                   data={trendlineData}
-                  stroke="#ef4444"
+                  stroke="#3b82f6"
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}

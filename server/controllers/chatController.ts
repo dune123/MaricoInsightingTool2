@@ -3,7 +3,7 @@ import { answerQuestion } from "../lib/dataAnalyzer.js";
 import { processChartData } from "../lib/chartGenerator.js";
 import { generateChartInsights } from "../lib/insightGenerator.js";
 import { chatResponseSchema } from "@shared/schema.js";
-import { getChatBySessionIdEfficient, addMessageToChat } from "../lib/cosmosDB.js";
+import { getChatBySessionIdEfficient, addMessageToChat, addMessagesBySessionId } from "../lib/cosmosDB.js";
 
 export const chatWithAI = async (req: Request, res: Response) => {
   try {
@@ -54,25 +54,39 @@ export const chatWithAI = async (req: Request, res: Response) => {
     }
 
     // Validate response
-    const validated = chatResponseSchema.parse(result);
+    let validated = chatResponseSchema.parse(result);
 
-    // Save messages to CosmosDB
+    // Ensure overall chat insights always present: derive from charts if missing
+    if ((!validated.insights || validated.insights.length === 0) && Array.isArray(validated.charts) && validated.charts.length > 0) {
+      try {
+        const derived = validated.charts
+          .map((c: any, idx: number) => {
+            const text = c?.keyInsight || (c?.title ? `Insight: ${c.title}` : null);
+            return text ? { id: idx + 1, text } : null;
+          })
+          .filter(Boolean) as { id: number; text: string }[];
+        if (derived.length > 0) {
+          validated = { ...validated, insights: derived } as any;
+        }
+      } catch {}
+    }
+
+    // Save messages to CosmosDB (by sessionId to avoid partition mismatches)
     try {
-      // Add user message
-      await addMessageToChat(chatDocument.id, username, {
-        role: 'user',
-        content: message,
-        timestamp: Date.now(),
-      });
-
-      // Add assistant response
-      await addMessageToChat(chatDocument.id, username, {
-        role: 'assistant',
-        content: validated.answer,
-        charts: validated.charts,
-        insights: validated.insights,
-        timestamp: Date.now(),
-      });
+      await addMessagesBySessionId(sessionId, [
+        {
+          role: 'user',
+          content: message,
+          timestamp: Date.now(),
+        },
+        {
+          role: 'assistant',
+          content: validated.answer,
+          charts: validated.charts,
+          insights: validated.insights,
+          timestamp: Date.now(),
+        },
+      ]);
 
       console.log(`✅ Messages saved to chat: ${chatDocument.id}`);
     } catch (cosmosError) {

@@ -67,7 +67,7 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
+            <LineChart data={data} margin={{ left: 60, right: 60, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -84,7 +84,19 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 tickFormatter={formatAxisLabel}
                 width={90}
                 label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
+                yAxisId="left"
               />
+              {chart.y2 && (
+                <YAxis
+                  orientation="right"
+                  yAxisId="right"
+                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
+                  stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={formatAxisLabel}
+                  width={90}
+                  label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
+                />
+              )}
               <Tooltip
                 contentStyle={{
                   backgroundColor: 'hsl(var(--card))',
@@ -103,7 +115,19 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 strokeWidth={3}
                 dot={{ r: 6 }}
                 activeDot={{ r: 8 }}
+                yAxisId="left"
               />
+              {chart.y2 && (
+                <Line
+                  type="monotone"
+                  dataKey={chart.y2 as string}
+                  stroke="#ef4444"
+                  strokeWidth={3}
+                  dot={{ r: 6 }}
+                  activeDot={{ r: 8 }}
+                  yAxisId="right"
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         );
@@ -238,7 +262,7 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                   type="linear"
                   dataKey={y}
                   data={trendlineData}
-                  stroke="#ef4444"
+                  stroke="#3b82f6"
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}

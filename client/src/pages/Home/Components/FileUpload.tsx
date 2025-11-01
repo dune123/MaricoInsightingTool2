@@ -1,14 +1,16 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
+
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
   isUploading: boolean;
+  autoOpenTrigger?: number;
 }
 
-export function FileUpload({ onFileSelect, isUploading }: FileUploadProps) {
+export function FileUpload({ onFileSelect, isUploading, autoOpenTrigger = 0 }: FileUploadProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
@@ -20,7 +22,7 @@ export function FileUpload({ onFileSelect, isUploading }: FileUploadProps) {
     }
   }, [onFileSelect]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: {
       'text/csv': ['.csv'],
@@ -30,6 +32,16 @@ export function FileUpload({ onFileSelect, isUploading }: FileUploadProps) {
     multiple: false,
     disabled: isUploading,
   });
+
+  // Programmatically open the file dialog when trigger changes
+  const lastTriggerRef = useRef<number>(0);
+  useEffect(() => {
+    // Only open once per unique trigger value; avoid re-open on cancel
+    if (autoOpenTrigger > 0 && autoOpenTrigger !== lastTriggerRef.current && !isUploading) {
+      lastTriggerRef.current = autoOpenTrigger;
+      try { open(); } catch {}
+    }
+  }, [autoOpenTrigger, isUploading]);
 
   return (
     <div className="h-[calc(100vh-80px)] bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4">

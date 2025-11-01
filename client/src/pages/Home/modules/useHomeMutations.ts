@@ -87,7 +87,6 @@ export const useHomeMutations = ({
         data: {
           sessionId,
           message,
-          chatHistory: messages,
         },
       });
     },
