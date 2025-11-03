@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Calendar, BarChart3, Trash2, Download, Loader2 } from 'lucide-react';
@@ -149,48 +149,180 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
       </div>
 
       <div className="flex flex-col gap-6">
-        {dashboard.charts.map((chart, index) => (
-          <div key={`${chart.title}-${index}`} className="rounded-lg border border-border bg-white/70 p-4 relative chart-group">
-            <div className="relative mb-4">
-              <div className="absolute right-0 -top-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => onDeleteChart(index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-start gap-4">
-              <ResizableTile id={`${dashboard.id}:chart:${index}`} minWidth={360} minHeight={240} className="flex-none" boundsSelector={'.chart-group'}>
-                <div className="relative group h-full" data-chart-index={index}>
-                  <ChartRenderer
-                    chart={chart}
-                    index={index}
-                    isSingleChart={false}
-                    showAddButton={false}
-                    useChartOnlyModal
-                    fillParent
-                  />
+        {dashboard.charts.map((chart, index) => {
+          const ChartGroup = ({ chart, index }: { chart: typeof dashboard.charts[0], index: number }) => {
+            const containerRef = useRef<HTMLDivElement>(null);
+            
+            useEffect(() => {
+              const updateContainerSize = () => {
+                if (!containerRef.current) return;
+                
+                const container = containerRef.current;
+                // Find all draggable tiles - ResizableTile wraps content in a div with position relative
+                // We need to find the outer draggable wrapper div
+                const tileContainers = container.querySelectorAll('[data-tile-container]') as NodeListOf<HTMLElement>;
+                
+                if (tileContainers.length === 0) return;
+                
+                let maxBottom = 0;
+                let maxRight = 0;
+                let minTop = Infinity;
+                let minLeft = Infinity;
+                
+                tileContainers.forEach((containerEl) => {
+                  // Get the first child div which is the Draggable wrapper
+                  const draggableElement = containerEl.firstElementChild as HTMLElement;
+                  if (!draggableElement) return;
+                  
+                  const rect = draggableElement.getBoundingClientRect();
+                  const containerRect = container.getBoundingClientRect();
+                  
+                  const relativeTop = rect.top - containerRect.top;
+                  const relativeLeft = rect.left - containerRect.left;
+                  const relativeBottom = rect.bottom - containerRect.top;
+                  const relativeRight = rect.right - containerRect.left;
+                  
+                  minTop = Math.min(minTop, relativeTop);
+                  minLeft = Math.min(minLeft, relativeLeft);
+                  maxBottom = Math.max(maxBottom, relativeBottom);
+                  maxRight = Math.max(maxRight, relativeRight);
+                });
+                
+                // Calculate the required dimensions
+                const requiredHeight = maxBottom - Math.min(0, minTop);
+                const requiredWidth = maxRight - Math.min(0, minLeft);
+                
+                // Get the layout width (parent of parent - the main content area)
+                const layoutContainer = container.closest('.flex-1') || container.parentElement?.parentElement;
+                // Get the actual available width from the parent container or calculate from viewport
+                let layoutWidth = 1200; // Default fallback
+                if (layoutContainer) {
+                  layoutWidth = (layoutContainer as HTMLElement).clientWidth;
+                } else {
+                  // Fallback: calculate from viewport minus sidebar (estimated)
+                  const sidebarWidth = document.querySelector('.w-64') ? 256 : (document.querySelector('.w-16') ? 64 : 0);
+                  layoutWidth = window.innerWidth - sidebarWidth;
+                }
+                
+                // Calculate container width with padding, but don't exceed layout width
+                const calculatedWidth = requiredWidth + 40;
+                const maxAllowedWidth = layoutWidth - 48; // Account for padding (p-6 = 24px each side)
+                
+                // Add padding to ensure all tiles are visible (accounting for padding in container)
+                container.style.minHeight = `${Math.max(400, requiredHeight + 40)}px`;
+                // Set minWidth but cap it at the layout width
+                container.style.minWidth = `${Math.min(calculatedWidth, maxAllowedWidth)}px`;
+                // Also set maxWidth to prevent overflow
+                container.style.maxWidth = `${maxAllowedWidth}px`;
+              };
+              
+              // Initial calculation with delay to ensure DOM is ready
+              const timeoutId = setTimeout(updateContainerSize, 100);
+              
+              // Watch for changes
+              const observer = new ResizeObserver(() => {
+                setTimeout(updateContainerSize, 50);
+              });
+              
+              const mutationObserver = new MutationObserver(() => {
+                setTimeout(updateContainerSize, 50);
+              });
+              
+              if (containerRef.current) {
+                observer.observe(containerRef.current);
+                mutationObserver.observe(containerRef.current, {
+                  childList: true,
+                  subtree: true,
+                  attributes: true,
+                  attributeFilter: ['style']
+                });
+              }
+              
+              // Also listen for drag and resize events
+              const handleInteraction = () => {
+                setTimeout(updateContainerSize, 100);
+              };
+              
+              window.addEventListener('mouseup', handleInteraction);
+              window.addEventListener('resize', handleInteraction);
+              
+              return () => {
+                clearTimeout(timeoutId);
+                observer.disconnect();
+                mutationObserver.disconnect();
+                window.removeEventListener('mouseup', handleInteraction);
+                window.removeEventListener('resize', handleInteraction);
+              };
+            }, []);
+            
+            return (
+              <div key={`${chart.title}-${index}`} className="rounded-lg border border-border bg-white/70 p-4 relative chart-group" ref={containerRef}>
+                <div className="relative mb-4">
+                  <div className="absolute right-0 -top-2 z-20">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onDeleteChart(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </ResizableTile>
+                <div className="relative w-full" style={{ minHeight: 'inherit' }}>
+                  <div data-tile-container>
+                    <ResizableTile id={`${dashboard.id}:chart:${index}`} minWidth={360} minHeight={240} className="flex-none" boundsSelector={`.chart-group:nth-of-type(${index + 1})`}>
+                      <div className="relative group h-full" data-chart-index={index}>
+                        <ChartRenderer
+                          chart={chart}
+                          index={index}
+                          isSingleChart={false}
+                          showAddButton={false}
+                          useChartOnlyModal
+                          fillParent
+                        />
+                      </div>
+                    </ResizableTile>
+                  </div>
 
-              {chart.keyInsight && (
-                <ResizableTile id={`${dashboard.id}:insight:${index}`} minWidth={320} minHeight={160} className="flex-none" boundsSelector={'.chart-group'}>
-                  <InsightRecommendationTile variant="insight" text={chart.keyInsight} />
-                </ResizableTile>
-              )}
+                  {chart.keyInsight && (
+                    <div data-tile-container>
+                      <ResizableTile 
+                        id={`${dashboard.id}:insight:${index}`} 
+                        minWidth={320} 
+                        minHeight={160} 
+                        className="flex-none" 
+                        boundsSelector={`.chart-group:nth-of-type(${index + 1})`}
+                        defaultWidth={320}
+                        defaultHeight={160}
+                      >
+                        <InsightRecommendationTile variant="insight" text={chart.keyInsight} />
+                      </ResizableTile>
+                    </div>
+                  )}
 
-              {chart.recommendation && (
-                <ResizableTile id={`${dashboard.id}:rec:${index}`} minWidth={320} minHeight={160} className="flex-none" boundsSelector={'.chart-group'}>
-                  <InsightRecommendationTile variant="recommendation" text={chart.recommendation} />
-                </ResizableTile>
-              )}
-            </div>
-          </div>
-        ))}
+                  {chart.recommendation && (
+                    <div data-tile-container>
+                      <ResizableTile 
+                        id={`${dashboard.id}:rec:${index}`} 
+                        minWidth={320} 
+                        minHeight={160} 
+                        className="flex-none" 
+                        boundsSelector={`.chart-group:nth-of-type(${index + 1})`}
+                        defaultWidth={320}
+                        defaultHeight={160}
+                      >
+                        <InsightRecommendationTile variant="recommendation" text={chart.recommendation} />
+                      </ResizableTile>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          };
+          
+          return <ChartGroup key={`${chart.title}-${index}`} chart={chart} index={index} />;
+        })}
       </div>
       </div>
     </div>
