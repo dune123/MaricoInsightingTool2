@@ -18,9 +18,11 @@ export function InsightRecommendationTile({ variant, text }: InsightRecommendati
     : 'text-green-800 dark:text-green-200';
 
   return (
-    <div className={`h-full p-4 rounded-md border ${containerClasses}`}>
-      <h3 className={`text-sm font-semibold mb-2 ${titleClasses}`}>{isInsight ? 'Key Insight' : 'Recommendation'}</h3>
-      <p className={`text-sm leading-relaxed ${textClasses}`}>{text}</p>
+    <div className={`h-full flex flex-col p-4 rounded-md border ${containerClasses} overflow-hidden`}>
+      <h3 className={`text-sm font-semibold mb-2 flex-shrink-0 ${titleClasses}`}>{isInsight ? 'Key Insight' : 'Recommendation'}</h3>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <p className={`text-sm leading-relaxed ${textClasses}`}>{text}</p>
+      </div>
     </div>
   );
 }
