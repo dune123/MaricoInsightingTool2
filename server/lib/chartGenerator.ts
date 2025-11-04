@@ -7,6 +7,59 @@ function toNumber(value: any): number {
   return Number(cleaned);
 }
 
+// Helper to parse date strings in various formats
+function parseDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  
+  const str = String(dateStr).trim();
+  
+  // Try common date formats
+  // Format: "MMM-YY" or "MMM YY" or "MMM-YYYY" (e.g., "Apr-24", "Apr 24", "Apr-2024")
+  const mmmYyMatch = str.match(/^([A-Za-z]{3})[-/]?(\d{2,4})$/);
+  if (mmmYyMatch) {
+    const monthNames: { [key: string]: number } = {
+      'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+      'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+    };
+    const month = monthNames[mmmYyMatch[1].toLowerCase().substring(0, 3)];
+    if (month !== undefined) {
+      let year = parseInt(mmmYyMatch[2]);
+      // If year is 2 digits, convert to 4 digits
+      // Common convention: 00-30 = 2000-2030, 31-99 = 1931-1999
+      if (year < 100) {
+        year = year <= 30 ? 2000 + year : 1900 + year;
+      }
+      return new Date(year, month, 1);
+    }
+  }
+  
+  // Try ISO format or standard date formats
+  const date = new Date(str);
+  if (!isNaN(date.getTime())) {
+    return date;
+  }
+  
+  return null;
+}
+
+// Helper to compare values for sorting - handles dates properly
+function compareValues(a: any, b: any): number {
+  const aStr = String(a);
+  const bStr = String(b);
+  
+  // Try to parse as dates
+  const aDate = parseDate(aStr);
+  const bDate = parseDate(bStr);
+  
+  if (aDate && bDate) {
+    // Both are dates, compare chronologically
+    return aDate.getTime() - bDate.getTime();
+  }
+  
+  // Fall back to string comparison
+  return aStr.localeCompare(bStr);
+}
+
 export function processChartData(
   data: Record<string, any>[],
   chartSpec: ChartSpec
@@ -163,8 +216,9 @@ export function processChartData(
       console.log(`   Using aggregation: ${aggregate}`);
       const aggregated = aggregateData(data, x, y, aggregate);
       console.log(`   Aggregated data points: ${aggregated.length}`);
-      const result = aggregated.sort((a, b) => String(a[x]).localeCompare(String(b[x])));
-      console.log(`   ${type} chart result: ${result.length} points`);
+      // Use date-aware sorting
+      const result = aggregated.sort((a, b) => compareValues(a[x], b[x]));
+      console.log(`   ${type} chart result: ${result.length} points (sorted chronologically)`);
       return result;
     }
 
@@ -175,9 +229,10 @@ export function processChartData(
         ...(y2 ? { [y2]: toNumber(row[y2]) } : {}),
       }))
       .filter((row) => !isNaN(row[y]) && (!y2 || !isNaN(row[y2 as string])))
-      .sort((a, b) => String(a[x]).localeCompare(String(b[x])));
+      // Use date-aware sorting for chronological order
+      .sort((a, b) => compareValues(a[x], b[x]));
     
-    console.log(`   ${type} chart result: ${result.length} points`);
+    console.log(`   ${type} chart result: ${result.length} points (sorted chronologically)`);
     return result;
   }
 

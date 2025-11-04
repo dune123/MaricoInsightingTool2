@@ -52,10 +52,35 @@ function findMatchingColumn(searchName: string, availableColumns: string[]): str
     }
   }
   
+  // Then try prefix match (search term is prefix of column name) - e.g., "PAEC" matches "PAEC nGRP Adstocked"
+  for (const col of availableColumns) {
+    const colNormalized = col.toLowerCase().replace(/[\s_-]/g, '');
+    if (colNormalized.startsWith(normalized) && normalized.length >= 3) {
+      return col;
+    }
+  }
+  
   // Then try partial match (search term contained in column name)
   for (const col of availableColumns) {
     const colNormalized = col.toLowerCase().replace(/[\s_-]/g, '');
     if (colNormalized.includes(normalized)) {
+      return col;
+    }
+  }
+  
+  // Try word-boundary matching (search term matches as a word in column name)
+  const searchWords = searchName.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  for (const col of availableColumns) {
+    const colLower = col.toLowerCase();
+    let allWordsMatch = true;
+    for (const word of searchWords) {
+      const wordRegex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (!wordRegex.test(colLower)) {
+        allWordsMatch = false;
+        break;
+      }
+    }
+    if (allWordsMatch && searchWords.length > 0) {
       return col;
     }
   }
@@ -82,6 +107,14 @@ export async function answerQuestion(
   const detectTwoSeriesLine = (q: string) => {
     console.log('🔍 detectTwoSeriesLine - checking query:', q);
     const ql = q.toLowerCase();
+    
+    // Skip if user explicitly wants a scatter plot
+    const wantsScatter = /\b(scatter\s+plot|scatterplot|scatter)\b/i.test(q);
+    if (wantsScatter) {
+      console.log('❌ detectTwoSeriesLine - user wants scatter plot, skipping line chart detection');
+      return null;
+    }
+    
     // More flexible detection: look for "and" or "vs" with mention of line chart, plot, or "over months/time"
     const mentionsLine = /\bline\b|\bline\s*chart\b|\bover\s+(?:time|months?|weeks?|days?)\b|\bplot\b|\bgraph\b/.test(ql);
     
@@ -150,6 +183,30 @@ export async function answerQuestion(
     return { x, y: a, y2: b };
   };
 
+  // Detect "against" queries like "plot A against B"
+  // Convention: second variable (after "against") -> X-axis, first variable -> Y-axis
+  const detectAgainstQuery = (q: string): { yVar: string | null; xVar: string | null } | null => {
+    const ql = q.toLowerCase();
+    if (!/\bagainst\b/i.test(ql)) return null;
+
+    const match = q.match(/(.+?)\s+against\s+(.+)/i);
+    if (!match) return null;
+
+    let yRaw = match[1].trim();
+    let xRaw = match[2].trim();
+
+    // Clean leading/trailing chart words
+    yRaw = yRaw.replace(/^(?:can\s+you\s+)?(?:please\s+)?(?:plot|graph|chart|show|display)\s+/i, '').trim();
+    xRaw = xRaw.replace(/\s+(?:on|with|using|separate|axes|axis|chart|graph|plot).*$/i, '').trim();
+
+    const allCols = summary.columns.map(c => c.name);
+    const yVar = findMatchingColumn(yRaw, allCols);
+    const xVar = findMatchingColumn(xRaw, allCols);
+    if (!yVar || !xVar) return null;
+    if (!summary.numericColumns.includes(yVar) || !summary.numericColumns.includes(xVar)) return null;
+    return { yVar, xVar };
+  };
+
   // Detect "vs" queries early - when user asks to plot X vs Y (especially with "two separate axes")
   const detectVsEarly = (q: string): { var1: string | null; var2: string | null } | null => {
     console.log('🔍 Early vs detection for:', q);
@@ -203,8 +260,235 @@ export async function answerQuestion(
     return { var1, var2 };
   };
 
-  // Check for two-series line chart FIRST (handles "and" queries)
+  // Generalized scatter plot detection - handles ANY variation of scatter plot requests
+  // Examples: "scatter chart between X and Y", "scatter plot of X and Y", "plot X and Y as scatter", etc.
+  const detectScatterPlotQuery = (q: string): { var1: string | null; var2: string | null } | null => {
+    console.log('🔍 detectScatterPlotQuery - checking query:', q);
+    const ql = q.toLowerCase();
+    
+    // Check for ANY scatter-related keywords - very permissive
+    const scatterPatterns = [
+      /\bscatter\s+chart\b/i,
+      /\bscatter\s+plot\b/i,
+      /\bscatterplot\b/i,
+      /\bscatter\b/i
+    ];
+    
+    const hasScatterKeyword = scatterPatterns.some(pattern => pattern.test(q));
+    if (!hasScatterKeyword) {
+      console.log('❌ No scatter plot keyword found');
+      return null;
+    }
+    
+    console.log('✅ Scatter keyword detected, extracting variables...');
+    const allCols = summary.columns.map(c => c.name);
+    console.log('📊 Available columns:', allCols);
+    
+    // Generalized extraction: Remove scatter keywords and extract variables
+    // Step 1: Remove scatter keywords and surrounding phrases
+    let cleanedQuery = q;
+    // Remove phrases like "scatter chart", "scatter plot", "scatterplot", "scatter"
+    cleanedQuery = cleanedQuery.replace(/\b(?:scatter\s+chart|scatter\s+plot|scatterplot|scatter)\b/gi, '');
+    // Remove common intro phrases
+    cleanedQuery = cleanedQuery.replace(/^(?:can\s+you\s+)?(?:please\s+)?(?:plot|graph|chart|show|display|create|draw|generate)\s+/i, '');
+    // Remove common connector phrases
+    cleanedQuery = cleanedQuery.replace(/\s+(?:between|of|for|with|using|as)\s+/gi, ' ');
+    cleanedQuery = cleanedQuery.replace(/\s+(?:in\s+a\s+)?(?:scatter|plot|chart|graph).*$/i, '');
+    cleanedQuery = cleanedQuery.trim();
+    
+    console.log('🧹 Cleaned query:', cleanedQuery);
+    
+    // Step 2: Extract variables using multiple strategies
+    let parts: string[] = [];
+    
+    // Strategy 1: Split by "and" (most common)
+    if (cleanedQuery.includes(' and ')) {
+      parts = cleanedQuery.split(/\s+and\s+/i).map(p => p.trim()).filter(p => p.length > 0);
+      console.log('📝 Strategy 1 (and):', parts);
+    }
+    // Strategy 2: Split by "vs"
+    else if (cleanedQuery.includes(' vs ')) {
+      parts = cleanedQuery.split(/\s+vs\s+/i).map(p => p.trim()).filter(p => p.length > 0);
+      console.log('📝 Strategy 2 (vs):', parts);
+    }
+    // Strategy 3: Split by comma
+    else if (cleanedQuery.includes(',')) {
+      parts = cleanedQuery.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      console.log('📝 Strategy 3 (comma):', parts);
+    }
+    // Strategy 4: Try to find two column names by matching against available columns
+    else {
+      // Split by spaces and try different combinations
+      const tokens = cleanedQuery.split(/\s+/).filter(t => t.trim().length > 0);
+      console.log('📝 Strategy 4 (tokens):', tokens);
+      
+      if (tokens.length >= 2) {
+        // Try different splits to find column matches
+        for (let i = 1; i < tokens.length; i++) {
+          const part1 = tokens.slice(0, i).join(' ');
+          const part2 = tokens.slice(i).join(' ');
+          
+          // Try to match against columns
+          const match1 = findMatchingColumn(part1, allCols);
+          const match2 = findMatchingColumn(part2, allCols);
+          
+          if (match1 && match2) {
+            parts = [part1, part2];
+            console.log('📝 Strategy 4 found match:', parts);
+            break;
+          }
+        }
+        
+        // If no match found, try matching individual tokens
+        if (parts.length < 2 && tokens.length >= 2) {
+          // Try first token and rest
+          const firstToken = tokens[0];
+          const restTokens = tokens.slice(1).join(' ');
+          const match1 = findMatchingColumn(firstToken, allCols);
+          const match2 = findMatchingColumn(restTokens, allCols);
+          
+          if (match1 && match2) {
+            parts = [firstToken, restTokens];
+            console.log('📝 Strategy 4 fallback match:', parts);
+          }
+        }
+      }
+    }
+    
+    if (parts.length < 2) {
+      console.log('❌ Could not extract two variables from query');
+      console.log('   Cleaned query:', cleanedQuery);
+      return null;
+    }
+    
+    // Clean up variable names further
+    const candidates = parts.slice(0, 2).map(p => 
+      p.replace(/^(?:the\s+)?(?:column\s+)?/i, '')
+       .replace(/\s+(?:column|variable|field|data).*$/i, '')
+       .replace(/[,\s]+$/g, '')
+       .trim()
+    ).filter(p => p.length > 0);
+    
+    if (candidates.length < 2) {
+      console.log('❌ Could not clean variables properly. Candidates:', candidates);
+      return null;
+    }
+    
+    console.log('📝 Final candidates:', candidates);
+    
+    // Try to match columns - use improved findMatchingColumn
+    let var1 = findMatchingColumn(candidates[0], allCols);
+    let var2 = findMatchingColumn(candidates[1], allCols);
+    
+    // If exact match fails, try more aggressive matching
+    if (!var1) {
+      console.log('⚠️ First variable not matched, trying aggressive matching for:', candidates[0]);
+      // Try prefix matching
+      for (const col of allCols) {
+        const colLower = col.toLowerCase().replace(/[\s_-]/g, '');
+        const candLower = candidates[0].toLowerCase().replace(/[\s_-]/g, '');
+        if (colLower.startsWith(candLower) && candLower.length >= 3) {
+          var1 = col;
+          console.log('✅ Prefix match found:', col);
+          break;
+        }
+      }
+    }
+    
+    if (!var2) {
+      console.log('⚠️ Second variable not matched, trying aggressive matching for:', candidates[1]);
+      for (const col of allCols) {
+        const colLower = col.toLowerCase().replace(/[\s_-]/g, '');
+        const candLower = candidates[1].toLowerCase().replace(/[\s_-]/g, '');
+        if (colLower.startsWith(candLower) && candLower.length >= 3) {
+          var2 = col;
+          console.log('✅ Prefix match found:', col);
+          break;
+        }
+      }
+    }
+    
+    console.log('🎯 Column matches (scatter):', { 
+      var1, 
+      var2, 
+      search1: candidates[0], 
+      search2: candidates[1] 
+    });
+    
+    if (!var1 || !var2) {
+      console.log('❌ Could not match columns for scatter plot');
+      console.log('   Available columns:', allCols);
+      console.log('   Searched for:', candidates);
+      return null;
+    }
+    
+    // Check if both are numeric (required for scatter plots)
+    const bothNumeric = summary.numericColumns.includes(var1) && summary.numericColumns.includes(var2);
+    if (!bothNumeric) {
+      console.log('❌ Not both numeric for scatter plot. var1 numeric:', summary.numericColumns.includes(var1), 'var2 numeric:', summary.numericColumns.includes(var2));
+      return null;
+    }
+    
+    console.log('✅ Valid scatter plot query detected:', { var1, var2 });
+    return { var1, var2 };
+  };
+
+  // Check for explicit scatter plot requests FIRST (before line chart detection)
   console.log('🔍 Starting detection for question:', question);
+  const scatterPlot = detectScatterPlotQuery(question);
+  if (scatterPlot && scatterPlot.var1 && scatterPlot.var2) {
+    console.log('✅ Explicit scatter plot request detected:', scatterPlot);
+    
+    // Verify columns exist in data
+    const firstRow = data[0];
+    if (!firstRow) {
+      console.error('❌ No data rows available');
+      return { answer: 'No data available to create charts. Please upload a data file first.' };
+    }
+    
+    if (!firstRow.hasOwnProperty(scatterPlot.var1)) {
+      console.error(`❌ Column "${scatterPlot.var1}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${scatterPlot.var1}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    if (!firstRow.hasOwnProperty(scatterPlot.var2)) {
+      console.error(`❌ Column "${scatterPlot.var2}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${scatterPlot.var2}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    // Create scatter plot - use flexible title format
+    const scatterSpec: ChartSpec = {
+      type: 'scatter',
+      title: `Scatter Chart: ${scatterPlot.var1} vs ${scatterPlot.var2}`,
+      x: scatterPlot.var1,
+      y: scatterPlot.var2,
+      xLabel: scatterPlot.var1,
+      yLabel: scatterPlot.var2,
+      aggregate: 'none',
+    };
+    
+    console.log('🔄 Processing scatter plot data...');
+    const scatterData = processChartData(data, scatterSpec);
+    console.log(`✅ Scatter data: ${scatterData.length} points`);
+    
+    if (scatterData.length === 0) {
+      const allCols = summary.columns.map(c => c.name);
+      return { 
+        answer: `No valid data points found for scatter plot. Please check that columns "${scatterPlot.var1}" and "${scatterPlot.var2}" exist and contain numeric data. Available columns: ${allCols.join(', ')}` 
+      };
+    }
+    
+    const scatterInsights = await generateChartInsights(scatterSpec, scatterData, summary);
+    
+    return { 
+      answer: `Created a scatter plot: X = ${scatterPlot.var1}, Y = ${scatterPlot.var2}.`,
+      charts: [{ ...scatterSpec, data: scatterData, keyInsight: scatterInsights.keyInsight, recommendation: scatterInsights.recommendation }]
+    };
+  }
+
+  // Check for two-series line chart (handles "and" queries) - AFTER scatter plot check
   const twoSeries = detectTwoSeriesLine(question);
   if (twoSeries) {
     console.log('✅ detectTwoSeriesLine matched! Result:', twoSeries);
@@ -268,6 +552,66 @@ export async function answerQuestion(
       : `Plotted two lines over ${twoSeries.x} with ${twoSeries.y} on the left axis and ${twoSeries.y2} on the right axis.`;
     
     return { answer, charts: [chart] };
+  }
+
+  // Handle "against" queries next (scatter by default; line if time-series context)
+  const against = detectAgainstQuery(question);
+  if (against && against.xVar && against.yVar) {
+    const firstRow = data[0];
+    if (!firstRow) {
+      return { answer: 'No data available to create charts. Please upload a data file first.' };
+    }
+    if (!firstRow.hasOwnProperty(against.xVar) || !firstRow.hasOwnProperty(against.yVar)) {
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Columns not found. Available columns: ${allCols.join(', ')}` };
+    }
+
+    // Decide time-series vs scatter
+    const mentionsTime = /\b(time|trend|over\s+(?:time|months?|weeks?|days?))\b/i.test(question);
+    const hasDate = summary.dateColumns && summary.dateColumns.length > 0;
+    if (mentionsTime && hasDate) {
+      const xTime = summary.dateColumns[0] || findMatchingColumn('Month', summary.columns.map(c => c.name)) || summary.columns[0].name;
+      const spec: ChartSpec = {
+        type: 'line',
+        title: `${against.yVar} against ${against.xVar} over ${xTime}`,
+        x: xTime,
+        y: against.yVar,
+        y2: against.xVar,
+        xLabel: xTime,
+        yLabel: against.yVar,
+        y2Label: against.xVar,
+        aggregate: 'none',
+      } as any;
+      const dataProcessed = processChartData(data, spec);
+      if (dataProcessed.length === 0) {
+        return { answer: `No valid data points found for line chart using ${xTime}.` };
+      }
+      const insights = await generateChartInsights(spec, dataProcessed, summary);
+      return { 
+        answer: `Created a dual-axis line chart: X = ${xTime}, left Y = ${against.yVar}, right Y = ${against.xVar}.`,
+        charts: [{ ...spec, data: dataProcessed, keyInsight: insights.keyInsight, recommendation: insights.recommendation }]
+      };
+    }
+
+    // Scatter plot default
+    const scatter: ChartSpec = {
+      type: 'scatter',
+      title: `Scatter: ${against.yVar} vs ${against.xVar}`,
+      x: against.xVar,
+      y: against.yVar,
+      xLabel: against.xVar,
+      yLabel: against.yVar,
+      aggregate: 'none',
+    };
+    const scatterData = processChartData(data, scatter);
+    if (scatterData.length === 0) {
+      return { answer: `No valid data points found for scatter plot with X=${against.xVar}, Y=${against.yVar}.` };
+    }
+    const scatterInsights = await generateChartInsights(scatter, scatterData, summary);
+    return { 
+      answer: `Created a scatter plot: X = ${against.xVar}, Y = ${against.yVar}.`,
+      charts: [{ ...scatter, data: scatterData, keyInsight: scatterInsights.keyInsight, recommendation: scatterInsights.recommendation }]
+    };
   }
 
   // Then check for "vs" queries (for scatter plots and comparisons)
@@ -640,10 +984,16 @@ IMPORTANT:
 - Use only the exact column names provided - do not modify them
 
 Chart type preferences:
-- Line/area charts for time series (if date columns exist)
-- Bar charts for categorical comparisons (top 10)
-- Scatter plots for relationships between numeric columns
-- Pie charts for proportions (top 5)
+- Line/area charts for time series (if date columns exist) - use DATE columns on X-axis
+- Bar charts for categorical comparisons (top 10) - use CATEGORICAL columns (like Product, Brand, Category) on X-axis, NOT date columns
+- Scatter plots for relationships between numeric columns - use NUMERIC columns on both axes
+- Pie charts for proportions (top 5) - use CATEGORICAL columns (like Product, Brand, Category, Region) on X-axis, NOT date columns like Month or Date
+
+CRITICAL RULES FOR PIE CHARTS:
+- X-axis MUST be a categorical column (Product, Brand, Category, Region, etc.)
+- NEVER use date columns (Month, Date, Week, Year) as X-axis for pie charts
+- Y-axis should be a numeric column (sum, mean, count)
+- Example: "Product" (x-axis) vs "Revenue" (y-axis) = pie chart showing revenue by product
 
 Output format: [{"type": "...", "title": "...", "x": "...", "y": "...", "aggregate": "..."}, ...]`;
 
@@ -695,6 +1045,11 @@ Output format: [{"type": "...", "title": "...", "x": "...", "y": "...", "aggrega
     const availableColumns = summary.columns.map(c => c.name);
     const numericColumns = summary.numericColumns;
     const dateColumns = summary.dateColumns;
+    
+    // Get categorical columns (non-numeric, non-date)
+    const categoricalColumns = availableColumns.filter(
+      col => !numericColumns.includes(col) && !dateColumns.includes(col)
+    );
     
     const sanitized = charts.slice(0, 6).map((spec: any) => {
       // Extract x and y, handling various formats
@@ -802,6 +1157,28 @@ Output format: [{"type": "...", "title": "...", "x": "...", "y": "...", "aggrega
         console.log(`   Fixed Y column to: "${y}"`);
       }
       
+      // For pie charts, ensure X-axis is NOT a date column
+      if (spec.type === 'pie' && dateColumns.includes(x)) {
+        console.warn(`⚠️ Pie chart "${spec.title}" incorrectly uses date column "${x}" on X-axis. Finding categorical alternative...`);
+        
+        // Try to find a categorical column instead
+        const alternativeX = categoricalColumns.find(col => 
+          col.toLowerCase().includes('product') || 
+          col.toLowerCase().includes('brand') || 
+          col.toLowerCase().includes('category') ||
+          col.toLowerCase().includes('region') ||
+          col.toLowerCase().includes('name')
+        ) || categoricalColumns[0];
+        
+        if (alternativeX) {
+          console.log(`   Replacing "${x}" with "${alternativeX}" for pie chart`);
+          x = alternativeX;
+        } else {
+          console.warn(`   No categorical column found, skipping this pie chart`);
+          return null; // Will be filtered out
+        }
+      }
+      
       return {
         type: spec.type,
         title: spec.title || 'Untitled Chart',
@@ -810,8 +1187,11 @@ Output format: [{"type": "...", "title": "...", "x": "...", "y": "...", "aggrega
         aggregate: spec.aggregate || 'none',
       };
     }).filter((spec: any) => 
+      spec && // Remove null entries (filtered pie charts)
       spec.type && spec.x && spec.y &&
-      ['line', 'bar', 'scatter', 'pie', 'area'].includes(spec.type)
+      ['line', 'bar', 'scatter', 'pie', 'area'].includes(spec.type) &&
+      // Additional validation: pie charts should not use date columns
+      !(spec.type === 'pie' && dateColumns.includes(spec.x))
     );
     
     console.log('Generated charts:', sanitized.length);

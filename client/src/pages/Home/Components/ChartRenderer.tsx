@@ -194,10 +194,28 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
           }
         }
 
+        // Custom tooltip for scatter to show exact X, Y values
+        const renderScatterTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+          // Some environments don't set `active` reliably; rely on payload presence
+          if (!payload || payload.length === 0) return null;
+          const p = payload[0]?.payload as any;
+          if (!p) return null;
+          const xVal = p[x];
+          const yVal = p[y];
+          return (
+            <div style={{ background: 'white', border: '1px solid hsl(var(--border))', borderRadius: 6, padding: '6px 8px', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', marginBottom: 4 }}>{xLabel || x}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>{String(xVal)}</div>
+              <div style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', marginTop: 6 }}>{yLabel || y}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>{String(yVal)}</div>
+            </div>
+          );
+        };
+
         // Use ComposedChart to render scatter with trendline
         return (
           <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
-            <ComposedChart margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
+            <ComposedChart data={data} margin={{ left: 50, right: 10, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -218,8 +236,20 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 width={60}
                 label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
               />
-              <Tooltip />
-              <Scatter name={`${x} vs ${y}`} data={data} fill={chartColor} fillOpacity={0.6} />
+              <Tooltip
+                cursor={{ strokeDasharray: '3 3' }}
+                formatter={(_value: any, _name: any, props: any) => {
+                  const p = (props && props.payload) || {};
+                  const yVal = p[y];
+                  return [String(yVal), yLabel || y];
+                }}
+                labelFormatter={(_label: any, payload: any[]) => {
+                  const p = payload && payload[0] && payload[0].payload;
+                  const xVal = p ? p[x] : '';
+                  return `${xLabel || x}: ${String(xVal)}`;
+                }}
+              />
+              <Scatter name={`${y}`} data={data} dataKey={y} fill={chartColor} fillOpacity={0.6} isAnimationActive={false} />
               {trendlineData && trendlineData.length === 2 && (
                 <Line
                   type="linear"
