@@ -65,9 +65,13 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
   const renderChart = () => {
     switch (type) {
       case 'line':
+        // For dual-axis charts, use blue for left axis, red for right axis
+        const leftAxisColor = chart.y2 ? '#3b82f6' : chartColor; // Blue for left when dual-axis
+        const rightAxisColor = '#ef4444'; // Red for right axis
+        
         return (
           <ResponsiveContainer width="100%" height={fillParent ? '100%' : isSingleChart ? 400 : 250}>
-            <LineChart data={data} margin={{ left: 50, right: 50, top: 10, bottom: 30 }}>
+            <LineChart data={data} margin={{ left: 50, right: chart.y2 ? 50 : 10, top: 10, bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -77,38 +81,59 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
                 label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
                 height={50}
               />
-              <YAxis
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                width={60}
-                tickFormatter={formatAxisLabel}
-                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
-                yAxisId="left"
-              />
-              {chart.y2 && (
+              {chart.y2 ? (
+                <>
+                  <YAxis
+                    tick={{ fill: leftAxisColor, fontSize: 10, fontWeight: 500 }}
+                    width={60}
+                    tickFormatter={formatAxisLabel}
+                    label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 12, fontWeight: 600 } }}
+                    yAxisId="left"
+                    stroke={leftAxisColor}
+                  />
+                  <YAxis
+                    orientation="right"
+                    yAxisId="right"
+                    tick={{ fill: rightAxisColor, fontSize: 10, fontWeight: 500 }}
+                    width={60}
+                    tickFormatter={formatAxisLabel}
+                    label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: rightAxisColor, fontSize: 12, fontWeight: 600 } }}
+                    stroke={rightAxisColor}
+                  />
+                </>
+              ) : (
                 <YAxis
-                  orientation="right"
-                  yAxisId="right"
-                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                  tick={{ fill: leftAxisColor, fontSize: 10, fontWeight: 500 }}
                   width={60}
                   tickFormatter={formatAxisLabel}
-                  label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 } }}
+                  label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 12, fontWeight: 600 } }}
+                  stroke={leftAxisColor}
                 />
               )}
               <Tooltip />
+              {chart.y2 && (
+                <Legend
+                  wrapperStyle={{ paddingTop: '10px' }}
+                  iconType="line"
+                  formatter={(value) => value}
+                />
+              )}
               <Line
                 type="monotone"
                 dataKey={y}
-                stroke={chartColor}
+                name={chart.y2 ? (yLabel || y) : undefined}
+                stroke={leftAxisColor}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
-                yAxisId="left"
+                {...(chart.y2 ? { yAxisId: "left" } : {})}
               />
               {chart.y2 && (
                 <Line
                   type="monotone"
                   dataKey={chart.y2 as string}
-                  stroke="#ef4444"
+                  name={chart.y2Label || chart.y2}
+                  stroke={rightAxisColor}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -156,7 +181,7 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
         // Calculate trendline if not provided but we have data
         let trendlineData = trendLine;
-        if (!trendlineData && data.length > 0 && xDomain && yDomain) {
+        if (!trendlineData && data.length > 0) {
           // Calculate linear regression from data points
           const validData = data.filter((d: any) => {
             const xVal = typeof d[x] === 'number' ? d[x] : Number(d[x]);
@@ -180,9 +205,22 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
               const slope = (n * sumXY - sumX * sumY) / denominator;
               const intercept = (sumY - slope * sumX) / n;
               
-              // Create trendline points using the domain boundaries
-              const xMin = xDomain[0];
-              const xMax = xDomain[1];
+              // Calculate domain boundaries from data if not provided
+              let xMin: number, xMax: number;
+              if (xDomain && typeof xDomain[0] === 'number' && typeof xDomain[1] === 'number') {
+                xMin = xDomain[0];
+                xMax = xDomain[1];
+              } else {
+                // Calculate from actual data
+                xMin = Math.min(...xValues);
+                xMax = Math.max(...xValues);
+                // Add a small padding (5% on each side)
+                const xPadding = (xMax - xMin) * 0.05;
+                xMin = xMin - xPadding;
+                xMax = xMax + xPadding;
+              }
+              
+              // Calculate Y values for trendline at domain boundaries
               const yAtMin = slope * xMin + intercept;
               const yAtMax = slope * xMax + intercept;
               

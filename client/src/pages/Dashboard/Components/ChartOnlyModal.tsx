@@ -20,6 +20,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   Cell,
 } from 'recharts';
 
@@ -56,9 +57,13 @@ export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) 
   const renderChart = () => {
     switch (type) {
       case 'line':
+        // For dual-axis charts, use blue for left axis, red for right axis
+        const leftAxisColor = chart.y2 ? '#3b82f6' : chartColor; // Blue for left when dual-axis
+        const rightAxisColor = '#ef4444'; // Red for right axis
+        
         return (
           <ResponsiveContainer width="100%" height={480}>
-            <LineChart data={data} margin={{ left: 60, right: 20, top: 20, bottom: 40 }}>
+            <LineChart data={data} margin={{ left: 60, right: chart.y2 ? 60 : 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -69,13 +74,35 @@ export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) 
                 label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
                 height={60}
               />
-              <YAxis
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
-                stroke="hsl(var(--muted-foreground))"
-                tickFormatter={formatAxisLabel}
-                width={90}
-                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
-              />
+              {chart.y2 ? (
+                <>
+                  <YAxis
+                    tick={{ fill: leftAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                    stroke={leftAxisColor}
+                    tickFormatter={formatAxisLabel}
+                    width={90}
+                    label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 16, fontWeight: 600 } }}
+                    yAxisId="left"
+                  />
+                  <YAxis
+                    orientation="right"
+                    yAxisId="right"
+                    tick={{ fill: rightAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                    stroke={rightAxisColor}
+                    tickFormatter={formatAxisLabel}
+                    width={90}
+                    label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: rightAxisColor, fontSize: 16, fontWeight: 600 } }}
+                  />
+                </>
+              ) : (
+                <YAxis
+                  tick={{ fill: leftAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                  stroke={leftAxisColor}
+                  tickFormatter={formatAxisLabel}
+                  width={90}
+                  label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 16, fontWeight: 600 } }}
+                />
+              )}
               <Tooltip
                 contentStyle={{
                   backgroundColor: 'hsl(var(--card))',
@@ -87,14 +114,35 @@ export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) 
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: '14px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
+              {chart.y2 && (
+                <Legend
+                  wrapperStyle={{ paddingTop: '10px' }}
+                  iconType="line"
+                  formatter={(value) => value}
+                />
+              )}
               <Line
                 type="monotone"
                 dataKey={y}
-                stroke={chartColor}
+                name={chart.y2 ? (yLabel || y) : undefined}
+                stroke={leftAxisColor}
                 strokeWidth={3}
                 dot={{ r: 6 }}
                 activeDot={{ r: 8 }}
+                {...(chart.y2 ? { yAxisId: "left" } : {})}
               />
+              {chart.y2 && (
+                <Line
+                  type="monotone"
+                  dataKey={chart.y2 as string}
+                  name={chart.y2Label || chart.y2}
+                  stroke={rightAxisColor}
+                  strokeWidth={3}
+                  dot={{ r: 6 }}
+                  activeDot={{ r: 8 }}
+                  yAxisId="right"
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         );

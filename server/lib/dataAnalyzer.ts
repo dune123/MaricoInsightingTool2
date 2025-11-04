@@ -433,8 +433,103 @@ export async function answerQuestion(
     return { var1, var2 };
   };
 
-  // Check for explicit scatter plot requests FIRST (before line chart detection)
+  // Detect "correlation between X and Y" queries - should generate scatter plot directly
+  const detectCorrelationBetween = (q: string): { var1: string | null; var2: string | null } | null => {
+    console.log('🔍 detectCorrelationBetween - checking query:', q);
+    const ql = q.toLowerCase();
+    
+    // Look for "correlation between" or "correlation of" patterns
+    const correlationPatterns = [
+      /\bcorrelation\s+between\s+(.+?)\s+and\s+(.+)/i,
+      /\bcorrelation\s+of\s+(.+?)\s+and\s+(.+)/i,
+      /\bcorrelation\s+between\s+(.+?)\s+with\s+(.+)/i,
+    ];
+    
+    for (const pattern of correlationPatterns) {
+      const match = q.match(pattern);
+      if (match && match.length >= 3) {
+        const allCols = summary.columns.map(c => c.name);
+        let var1Raw = match[1].trim();
+        let var2Raw = match[2].trim();
+        
+        // Clean up variable names
+        var1Raw = var1Raw.replace(/^(?:the\s+)?/i, '').trim();
+        var2Raw = var2Raw.replace(/\s+(?:and|with|versus|vs).*$/i, '').trim();
+        
+        console.log('📝 Raw extracted (correlation between):', { var1Raw, var2Raw });
+        
+        const var1 = findMatchingColumn(var1Raw, allCols);
+        const var2 = findMatchingColumn(var2Raw, allCols);
+        
+        console.log('🎯 Column matches (correlation between):', { var1, var2 });
+        
+        if (var1 && var2 && summary.numericColumns.includes(var1) && summary.numericColumns.includes(var2)) {
+          console.log('✅ Valid correlation between query detected:', { var1, var2 });
+          return { var1, var2 };
+        }
+      }
+    }
+    
+    console.log('❌ No correlation between pattern found');
+    return null;
+  };
+
+  // Check for "correlation between X and Y" FIRST (before scatter plot detection)
   console.log('🔍 Starting detection for question:', question);
+  const correlationBetween = detectCorrelationBetween(question);
+  if (correlationBetween && correlationBetween.var1 && correlationBetween.var2) {
+    console.log('✅ Correlation between query detected:', correlationBetween);
+    
+    // Verify columns exist in data
+    const firstRow = data[0];
+    if (!firstRow) {
+      console.error('❌ No data rows available');
+      return { answer: 'No data available to create charts. Please upload a data file first.' };
+    }
+    
+    if (!firstRow.hasOwnProperty(correlationBetween.var1)) {
+      console.error(`❌ Column "${correlationBetween.var1}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${correlationBetween.var1}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    if (!firstRow.hasOwnProperty(correlationBetween.var2)) {
+      console.error(`❌ Column "${correlationBetween.var2}" not found in data`);
+      const allCols = summary.columns.map(c => c.name);
+      return { answer: `Column "${correlationBetween.var2}" not found in the data. Available columns: ${allCols.join(', ')}` };
+    }
+    
+    // Create scatter plot directly
+    const scatterSpec: ChartSpec = {
+      type: 'scatter',
+      title: `Correlation: ${correlationBetween.var1} vs ${correlationBetween.var2}`,
+      x: correlationBetween.var1,
+      y: correlationBetween.var2,
+      xLabel: correlationBetween.var1,
+      yLabel: correlationBetween.var2,
+      aggregate: 'none',
+    };
+    
+    console.log('🔄 Processing correlation scatter plot data...');
+    const scatterData = processChartData(data, scatterSpec);
+    console.log(`✅ Scatter data: ${scatterData.length} points`);
+    
+    if (scatterData.length === 0) {
+      const allCols = summary.columns.map(c => c.name);
+      return { 
+        answer: `No valid data points found for scatter plot. Please check that columns "${correlationBetween.var1}" and "${correlationBetween.var2}" exist and contain numeric data. Available columns: ${allCols.join(', ')}` 
+      };
+    }
+    
+    const scatterInsights = await generateChartInsights(scatterSpec, scatterData, summary);
+    
+    return { 
+      answer: `Created a scatter plot showing the correlation between ${correlationBetween.var1} and ${correlationBetween.var2}: X = ${correlationBetween.var1}, Y = ${correlationBetween.var2}.`,
+      charts: [{ ...scatterSpec, data: scatterData, keyInsight: scatterInsights.keyInsight, recommendation: scatterInsights.recommendation }]
+    };
+  }
+
+  // Check for explicit scatter plot requests (after correlation between detection)
   const scatterPlot = detectScatterPlotQuery(question);
   if (scatterPlot && scatterPlot.var1 && scatterPlot.var2) {
     console.log('✅ Explicit scatter plot request detected:', scatterPlot);
@@ -1210,48 +1305,145 @@ async function generateInsights(
   data: Record<string, any>[],
   summary: DataSummary
 ): Promise<Insight[]> {
-  // Calculate basic statistics
+  // Calculate comprehensive statistics with percentiles and variability
   const stats: Record<string, any> = {};
+  const isPercent: Record<string, boolean> = {};
+
+  const percentile = (arr: number[], p: number): number => {
+    if (arr.length === 0) return NaN;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = (sorted.length - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (lo === hi) return sorted[lo];
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  };
+
+  const stdDev = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const variance = arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
+    return Math.sqrt(variance);
+  };
+
+  // Helper to format values per column (adds % when needed)
+  const formatValue = (col: string, v: number): string => {
+    if (!isFinite(v)) return String(v);
+    const abs = Math.abs(v);
+    const fmt = (n: number) => {
+      if (abs >= 100) return n.toFixed(0);
+      if (abs >= 10) return n.toFixed(1);
+      if (abs >= 1) return n.toFixed(2);
+      return n.toFixed(3);
+    };
+    return isPercent[col] ? `${fmt(v)}%` : fmt(v);
+  };
 
   for (const col of summary.numericColumns.slice(0, 5)) {
-    const values = data.map((row) => Number(row[col])).filter((v) => !isNaN(v));
+    // Detect percentage columns by scanning raw values for '%'
+    const rawHasPercent = data
+      .slice(0, 200)
+      .map(row => row[col])
+      .filter(v => v !== null && v !== undefined)
+      .some(v => typeof v === 'string' && v.includes('%'));
+    isPercent[col] = rawHasPercent;
+
+    const values = data.map((row) => Number(String(row[col]).replace(/[%,,]/g, ''))).filter((v) => !isNaN(v));
     if (values.length > 0) {
+      const sorted = [...values].sort((a, b) => a - b);
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      const p25 = percentile(values, 0.25);
+      const p50 = percentile(values, 0.5);
+      const p75 = percentile(values, 0.75);
+      const p90 = percentile(values, 0.9);
+      const std = stdDev(values);
+      const cv = avg !== 0 ? (std / Math.abs(avg)) * 100 : 0;
+      
       stats[col] = {
         min: Math.min(...values),
         max: Math.max(...values),
-        avg: values.reduce((a, b) => a + b, 0) / values.length,
+        avg: avg,
         total: values.reduce((a, b) => a + b, 0),
+        median: p50,
+        p25,
+        p75,
+        p90,
+        stdDev: std,
+        cv: cv,
+        variability: cv > 30 ? 'high' : cv > 15 ? 'moderate' : 'low',
+        count: values.length,
       };
     }
   }
 
-  const prompt = `Analyze this dataset and provide 5-7 specific, actionable business insights.
+  // Calculate top/bottom values for each column
+  const topBottomStats: Record<string, {top: Array<{value: number, row: number}>, bottom: Array<{value: number, row: number}>}> = {};
+  for (const col of summary.numericColumns.slice(0, 5)) {
+    const valuesWithIndex = data
+      .map((row, idx) => ({ value: Number(String(row[col]).replace(/[%,,]/g, '')), row: idx }))
+      .filter(item => !isNaN(item.value));
+    
+    if (valuesWithIndex.length > 0) {
+      topBottomStats[col] = {
+        top: valuesWithIndex.sort((a, b) => b.value - a.value).slice(0, 3),
+        bottom: valuesWithIndex.sort((a, b) => a.value - b.value).slice(0, 3),
+      };
+    }
+  }
+
+  const prompt = `Analyze this dataset and provide 5-7 specific, actionable business insights with QUANTIFIED recommendations.
 
 DATA SUMMARY:
 - ${summary.rowCount} rows, ${summary.columnCount} columns
 - Numeric columns: ${summary.numericColumns.join(', ')}
 
-KEY STATISTICS:
+COMPREHENSIVE STATISTICS:
 ${Object.entries(stats)
-  .map(([col, s]: [string, any]) => `${col}: avg=${s.avg.toFixed(2)}, min=${s.min}, max=${s.max}, total=${s.total.toFixed(2)}`)
-  .join('\n')}
+  .map(([col, s]: [string, any]) => {
+    const topBottom = topBottomStats[col];
+    const topStr = topBottom?.top.map(t => `${formatValue(col, t.value)}`).join(', ') || 'N/A';
+    const bottomStr = topBottom?.bottom.map(t => `${formatValue(col, t.value)}`).join(', ') || 'N/A';
+    return `${col}:
+  - Range: ${formatValue(col, s.min)} to ${formatValue(col, s.max)}
+  - Average: ${formatValue(col, s.avg)}
+  - Median (P50): ${formatValue(col, s.median)}
+  - Percentiles: P25=${formatValue(col, s.p25)}, P75=${formatValue(col, s.p75)}, P90=${formatValue(col, s.p90)}
+  - Total: ${formatValue(col, s.total)}
+  - Standard Deviation: ${formatValue(col, s.stdDev)}
+  - Coefficient of Variation: ${s.cv.toFixed(1)}% (${s.variability} variability)
+  - Top 3 values: ${topStr}
+  - Bottom 3 values: ${bottomStr}
+  - Data points: ${s.count}`;
+  })
+  .join('\n\n')}
 
 Each insight MUST include:
 1. A bold headline with the key finding (e.g., **High Marketing Efficiency:**)
-2. Specific numbers, percentages, or metrics from the data
+2. Specific numbers, percentages, or metrics from the statistics above (use actual percentiles, averages, top/bottom values)
 3. Explanation of WHY this matters to the business
-4. Actionable recommendation starting with "**Actionable Recommendation:**"
+4. Actionable recommendation starting with "**Actionable Recommendation:**" that includes:
+   - Explicit numeric targets or thresholds (e.g., "target ${summary.numericColumns[0]} above P75 value of X", "maintain between P25-P75 range")
+   - Specific improvement goals (e.g., "increase by X%", "reduce by Y units", "achieve P90 level of Z")
+   - Quantified benchmarks (e.g., "reach top 10% performance of ${topBottomStats[summary.numericColumns[0]]?.top[0]?.value.toFixed(2) || 'target'}")
+   - Measurable action items with specific numbers
 
 Format each insight as a complete paragraph with the structure:
-**[Insight Title]:** [Finding with specific metrics]. **Why it matters:** [Business impact]. **Actionable Recommendation:** [Specific action to take].
+**[Insight Title]:** [Finding with specific metrics from statistics]. **Why it matters:** [Business impact]. **Actionable Recommendation:** [Quantified recommendation with specific targets, thresholds, and improvement goals].
+
+CRITICAL REQUIREMENTS:
+- Use ACTUAL numbers from the statistics above (percentiles, averages, top/bottom values)
+- Recommendations must be measurable and quantifiable with specific targets
+- Include specific improvement percentages or absolute values
+- Reference actual percentile values (P75, P90) as targets
+- No vague language - use specific numbers like "increase to ${formatValue(summary.numericColumns[0] || '', stats[summary.numericColumns[0] || '']?.p75 || 0)}" or "maintain between ${formatValue(summary.numericColumns[0] || '', stats[summary.numericColumns[0] || '']?.p25 || 0)}-${formatValue(summary.numericColumns[0] || '', stats[summary.numericColumns[0] || '']?.p75 || 0)}"
 
 Example:
-**Revenue Concentration Risk:** The top 3 products account for 78% of total revenue ($2.4M out of $3.1M), indicating high dependency. **Why it matters:** Over-reliance on few products creates vulnerability to market shifts or competitive pressure. **Actionable Recommendation:** Diversify revenue streams by investing in product development for the remaining portfolio, targeting 60/40 split within 12 months.
+**Revenue Concentration Risk:** The top 3 products account for 78% of total revenue ($2.4M out of $3.1M), indicating high dependency. Average revenue per product is $X, with top performer at $Y (P90=${stats.revenue?.p90.toFixed(2) || 'Z'}). **Why it matters:** Over-reliance on few products creates vulnerability to market shifts or competitive pressure. **Actionable Recommendation:** Diversify revenue streams by investing in product development for the remaining portfolio. Target: Increase bottom 50% products' revenue by 25% to reach P50 level (${stats.revenue?.median.toFixed(2) || 'target'}) within 12 months, aiming for 60/40 split between top and bottom performers.
 
 Output as JSON array:
 {
   "insights": [
-    { "text": "**Insight Title:** Full insight text here..." },
+    { "text": "**Insight Title:** Full insight text here with quantified recommendation..." },
     ...
   ]
 }`;
@@ -1269,8 +1461,8 @@ Output as JSON array:
       },
     ],
     response_format: { type: 'json_object' },
-    temperature: 0.8,
-    max_tokens: 2000,
+    temperature: 0.6,
+    max_tokens: 2500,
   });
 
   const content = response.choices[0].message.content || '{}';
@@ -1802,9 +1994,20 @@ Output JSON:
     // Always provide chat-level insights: prefer model's, else derive from charts
     let overallInsights = Array.isArray(result.insights) ? result.insights : undefined;
     if ((!overallInsights || overallInsights.length === 0) && Array.isArray(processedCharts) && processedCharts.length > 0) {
-      overallInsights = processedCharts
-        .map((c, idx) => (c.keyInsight ? { id: idx + 1, text: c.keyInsight! } : null))
-        .filter(Boolean) as any;
+      // Generate insights from both keyInsights and recommendations
+      overallInsights = [];
+      processedCharts.forEach((c, idx) => {
+        if (c.keyInsight) {
+          overallInsights!.push({ id: overallInsights!.length + 1, text: c.keyInsight });
+        }
+        if (c.recommendation && c.recommendation !== c.keyInsight) {
+          overallInsights!.push({ id: overallInsights!.length + 1, text: `**Recommendation:** ${c.recommendation}` });
+        }
+      });
+      // If still no insights, create at least one fallback
+      if (overallInsights.length === 0) {
+        overallInsights = [{ id: 1, text: `Generated ${processedCharts.length} chart(s) based on your question. Review the charts for detailed insights.` }];
+      }
     }
 
     return {

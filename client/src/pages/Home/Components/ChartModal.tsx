@@ -65,9 +65,13 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
   const renderChart = () => {
     switch (type) {
       case 'line':
+        // For dual-axis charts, use blue for left axis, red for right axis
+        const leftAxisColor = chart.y2 ? '#3b82f6' : chartColor; // Blue for left when dual-axis
+        const rightAxisColor = '#ef4444'; // Red for right axis
+        
         return (
           <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={data} margin={{ left: 60, right: 60, top: 20, bottom: 40 }}>
+            <LineChart data={data} margin={{ left: 60, right: chart.y2 ? 60 : 20, top: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey={x}
@@ -78,23 +82,33 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 label={{ value: xLabel || x, position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
                 height={60}
               />
-              <YAxis
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
-                stroke="hsl(var(--muted-foreground))"
-                tickFormatter={formatAxisLabel}
-                width={90}
-                label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
-                yAxisId="left"
-              />
-              {chart.y2 && (
+              {chart.y2 ? (
+                <>
+                  <YAxis
+                    tick={{ fill: leftAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                    stroke={leftAxisColor}
+                    tickFormatter={formatAxisLabel}
+                    width={90}
+                    label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 16, fontWeight: 600 } }}
+                    yAxisId="left"
+                  />
+                  <YAxis
+                    orientation="right"
+                    yAxisId="right"
+                    tick={{ fill: rightAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                    stroke={rightAxisColor}
+                    tickFormatter={formatAxisLabel}
+                    width={90}
+                    label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: rightAxisColor, fontSize: 16, fontWeight: 600 } }}
+                  />
+                </>
+              ) : (
                 <YAxis
-                  orientation="right"
-                  yAxisId="right"
-                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 14, fontFamily: 'var(--font-mono)' }}
-                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fill: leftAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                  stroke={leftAxisColor}
                   tickFormatter={formatAxisLabel}
                   width={90}
-                  label={{ value: chart.y2Label || chart.y2, angle: 90, position: 'right', style: { textAnchor: 'middle', fill: 'hsl(var(--foreground))', fontSize: 16, fontWeight: 600 } }}
+                  label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 16, fontWeight: 600 } }}
                 />
               )}
               <Tooltip
@@ -108,20 +122,29 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
                 labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600, fontSize: '14px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))', fontSize: '14px' }}
               />
+              {chart.y2 && (
+                <Legend
+                  wrapperStyle={{ paddingTop: '10px' }}
+                  iconType="line"
+                  formatter={(value) => value}
+                />
+              )}
               <Line
                 type="monotone"
                 dataKey={y}
-                stroke={chartColor}
+                name={chart.y2 ? (yLabel || y) : undefined}
+                stroke={leftAxisColor}
                 strokeWidth={3}
                 dot={{ r: 6 }}
                 activeDot={{ r: 8 }}
-                yAxisId="left"
+                {...(chart.y2 ? { yAxisId: "left" } : {})}
               />
               {chart.y2 && (
                 <Line
                   type="monotone"
                   dataKey={chart.y2 as string}
-                  stroke="#ef4444"
+                  name={chart.y2Label || chart.y2}
+                  stroke={rightAxisColor}
                   strokeWidth={3}
                   dot={{ r: 6 }}
                   activeDot={{ r: 8 }}
@@ -181,7 +204,7 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
 
         // Calculate trendline if not provided but we have data
         let trendlineData = trendLine;
-        if (!trendlineData && data.length > 0 && xDomain && yDomain) {
+        if (!trendlineData && data.length > 0) {
           // Calculate linear regression from data points
           const validData = data.filter((d: any) => {
             const xVal = typeof d[x] === 'number' ? d[x] : Number(d[x]);
@@ -205,9 +228,22 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
               const slope = (n * sumXY - sumX * sumY) / denominator;
               const intercept = (sumY - slope * sumX) / n;
               
-              // Create trendline points using the domain boundaries
-              const xMin = xDomain[0];
-              const xMax = xDomain[1];
+              // Calculate domain boundaries from data if not provided
+              let xMin: number, xMax: number;
+              if (xDomain && typeof xDomain[0] === 'number' && typeof xDomain[1] === 'number') {
+                xMin = xDomain[0];
+                xMax = xDomain[1];
+              } else {
+                // Calculate from actual data
+                xMin = Math.min(...xValues);
+                xMax = Math.max(...xValues);
+                // Add a small padding (5% on each side)
+                const xPadding = (xMax - xMin) * 0.05;
+                xMin = xMin - xPadding;
+                xMax = xMax + xPadding;
+              }
+              
+              // Calculate Y values for trendline at domain boundaries
               const yAtMin = slope * xMin + intercept;
               const yAtMax = slope * xMax + intercept;
               
