@@ -69,6 +69,8 @@ export async function analyzeCorrelations(
   const topCorrelations = sortedCorrelations.slice(0, 12);
 
   // Generate scatter plots for top 3 correlations
+  // IMPORTANT: For correlation/impact questions, target variable ALWAYS goes on Y-axis
+  // X-axis = factor variable (what we can change), Y-axis = target variable (what we want to improve)
   const scatterCharts: ChartSpec[] = topCorrelations.slice(0, 3).map((corr, idx) => {
     const scatterData = data
       .map((row) => ({
@@ -78,17 +80,10 @@ export async function analyzeCorrelations(
       .filter((row) => !isNaN(row[corr.variable]) && !isNaN(row[targetVariable]))
       .slice(0, 1000);
     
-    // Smart axis selection: put smaller range on X-axis, larger range on Y-axis
-    const varValues = scatterData.map(row => row[corr.variable]);
-    const targetValues = scatterData.map(row => row[targetVariable]);
-    
-    const varRange = Math.max(...varValues) - Math.min(...varValues);
-    const targetRange = Math.max(...targetValues) - Math.min(...targetValues);
-    
-    // If target has smaller range, swap axes for better visualization
-    const useSwappedAxes = targetRange < varRange;
-    const xAxis = useSwappedAxes ? targetVariable : corr.variable;
-    const yAxis = useSwappedAxes ? corr.variable : targetVariable;
+    // For correlation analysis: X-axis = factor variable, Y-axis = target variable
+    // This ensures recommendations are about "how to change X to improve Y"
+    const xAxis = corr.variable;  // Factor we can change
+    const yAxis = targetVariable; // Target we want to improve
     
     // Calculate smart axis domains with padding (only if we have valid data)
     let xDomain: [number, number] | undefined;
@@ -137,19 +132,23 @@ export async function analyzeCorrelations(
       }
     }
     
-    console.log(`Scatter chart ${idx}: ${corr.variable} vs ${targetVariable}, data points: ${scatterData.length}, axes: ${useSwappedAxes ? 'swapped' : 'normal'}${xDomain ? `, xDomain: [${xDomain[0].toFixed(1)}, ${xDomain[1].toFixed(1)}]` : ''}${yDomain ? `, yDomain: [${yDomain[0].toFixed(1)}, ${yDomain[1].toFixed(1)}]` : ''}${trendLine ? ', trend line: yes' : ', trend line: no'}`);
+    console.log(`Scatter chart ${idx}: ${corr.variable} (X-axis, factor) vs ${targetVariable} (Y-axis, target), data points: ${scatterData.length}${xDomain ? `, xDomain: [${xDomain[0].toFixed(1)}, ${xDomain[1].toFixed(1)}]` : ''}${yDomain ? `, yDomain: [${yDomain[0].toFixed(1)}, ${yDomain[1].toFixed(1)}]` : ''}${trendLine ? ', trend line: yes' : ', trend line: no'}`);
     
     return {
       type: 'scatter',
       title: `${corr.variable} vs ${targetVariable} (r=${corr.correlation.toFixed(2)})`,
-      x: xAxis,
-      y: yAxis,
+      x: xAxis,  // Factor variable (what we can change)
+      y: yAxis,  // Target variable (what we want to improve)
       xLabel: xAxis,
       yLabel: yAxis,
       data: scatterData,
       ...(xDomain && { xDomain }),
       ...(yDomain && { yDomain }),
       ...(trendLine && { trendLine }),
+      // Mark this as a correlation chart for insight generation
+      _isCorrelationChart: true,
+      _targetVariable: targetVariable,
+      _factorVariable: corr.variable,
     };
   });
 
@@ -214,7 +213,15 @@ export async function analyzeCorrelations(
   }
 
   // Generate AI insights about correlations (use full sorted list so AI doesn't miss variables)
-  const insights = await generateCorrelationInsights(targetVariable, sortedCorrelations);
+  // Pass data and summary for quantified recommendations
+  const summaryStub: DataSummary = {
+    rowCount: data.length,
+    columnCount: Object.keys(data[0] || {}).length,
+    columns: Object.keys(data[0] || {}).map((name) => ({ name, type: typeof (data[0] || {})[name], sampleValues: [] as any })),
+    numericColumns: numericColumns,
+    dateColumns: [],
+  } as unknown as DataSummary;
+  const insights = await generateCorrelationInsights(targetVariable, sortedCorrelations, data, summaryStub);
 
   return { charts, insights };
 }
@@ -277,8 +284,74 @@ function pearsonCorrelation(x: number[], y: number[]): number {
 
 async function generateCorrelationInsights(
   targetVariable: string,
-  correlations: CorrelationResult[]
+  correlations: CorrelationResult[],
+  data?: Record<string, any>[],
+  summary?: DataSummary
 ): Promise<Insight[]> {
+  // Calculate quantified statistics for top correlations if data is available
+  let quantifiedStats = '';
+  if (data && data.length > 0 && summary) {
+    const top3Correlations = correlations.slice(0, 3);
+    quantifiedStats = '\n\nQUANTIFIED STATISTICS FOR TOP FACTORS:\n';
+    
+    for (const corr of top3Correlations) {
+      const factorValues = data
+        .map(row => Number(String(row[corr.variable]).replace(/[%,,]/g, '')))
+        .filter(v => !isNaN(v));
+      const targetValues = data
+        .map(row => Number(String(row[targetVariable]).replace(/[%,,]/g, '')))
+        .filter(v => !isNaN(v));
+      
+      if (factorValues.length > 0 && targetValues.length > 0) {
+        const factorAvg = factorValues.reduce((a, b) => a + b, 0) / factorValues.length;
+        const factorMin = Math.min(...factorValues);
+        const factorMax = Math.max(...factorValues);
+        const factorP25 = factorValues.sort((a, b) => a - b)[Math.floor(factorValues.length * 0.25)];
+        const factorP75 = factorValues.sort((a, b) => a - b)[Math.floor(factorValues.length * 0.75)];
+        
+        const targetAvg = targetValues.reduce((a, b) => a + b, 0) / targetValues.length;
+        const targetMin = Math.min(...targetValues);
+        const targetMax = Math.max(...targetValues);
+        const targetP75 = targetValues.sort((a, b) => a - b)[Math.floor(targetValues.length * 0.75)];
+        const targetP90 = targetValues.sort((a, b) => a - b)[Math.floor(targetValues.length * 0.9)];
+        
+        // Find factor values for top target performers
+        const pairs = data
+          .map(row => ({
+            factor: Number(String(row[corr.variable]).replace(/[%,,]/g, '')),
+            target: Number(String(row[targetVariable]).replace(/[%,,]/g, ''))
+          }))
+          .filter(p => !isNaN(p.factor) && !isNaN(p.target));
+        
+        const topTargetPairs = pairs
+          .sort((a, b) => b.target - a.target)
+          .slice(0, Math.min(10, Math.floor(pairs.length * 0.2)));
+        
+        const optimalFactorRange = topTargetPairs.length > 0 ? {
+          min: Math.min(...topTargetPairs.map(p => p.factor)),
+          max: Math.max(...topTargetPairs.map(p => p.factor)),
+          avg: topTargetPairs.reduce((sum, p) => sum + p.factor, 0) / topTargetPairs.length
+        } : null;
+        
+        const formatValue = (val: number, isPercent: boolean = false): string => {
+          if (!isFinite(val)) return 'N/A';
+          const abs = Math.abs(val);
+          const fmt = abs >= 100 ? val.toFixed(0) : abs >= 10 ? val.toFixed(1) : abs >= 1 ? val.toFixed(2) : val.toFixed(3);
+          return isPercent ? `${fmt}%` : fmt;
+        };
+        
+        const factorIsPercent = data.some(row => typeof row[corr.variable] === 'string' && row[corr.variable].includes('%'));
+        const targetIsPercent = data.some(row => typeof row[targetVariable] === 'string' && row[targetVariable].includes('%'));
+        
+        quantifiedStats += `\n${corr.variable} (r=${corr.correlation.toFixed(2)}):
+- Factor range: ${formatValue(factorMin, factorIsPercent)} to ${formatValue(factorMax, factorIsPercent)} (avg: ${formatValue(factorAvg, factorIsPercent)}, P25-P75: ${formatValue(factorP25, factorIsPercent)}-${formatValue(factorP75, factorIsPercent)})
+- Target range: ${formatValue(targetMin, targetIsPercent)} to ${formatValue(targetMax, targetIsPercent)} (avg: ${formatValue(targetAvg, targetIsPercent)}, P75: ${formatValue(targetP75, targetIsPercent)}, P90: ${formatValue(targetP90, targetIsPercent)})
+${optimalFactorRange ? `- Optimal ${corr.variable} range for top ${targetVariable} performers: ${formatValue(optimalFactorRange.min, factorIsPercent)}-${formatValue(optimalFactorRange.max, factorIsPercent)} (avg: ${formatValue(optimalFactorRange.avg, factorIsPercent)})` : ''}
+`;
+      }
+    }
+  }
+  
   const prompt = `Analyze these correlations with ${targetVariable}.
 
 DATA HANDLING RULES (must follow exactly):
@@ -288,8 +361,23 @@ DATA HANDLING RULES (must follow exactly):
 
 VALUES (variable: r, nPairs):
 ${correlations.map((c) => `- ${c.variable}: ${c.correlation.toFixed(3)}, n=${c.nPairs ?? 'NA'}`).join('\n')}
+${quantifiedStats}
 
-Write 3-5 insights. Each must include: (1) bold headline, (2) exact r and nPairs, (3) interpretation, (4) one actionable recommendation and a reminder that correlation != causation.
+CRITICAL CONTEXT:
+- ${targetVariable} is the TARGET VARIABLE we want to IMPROVE (Y-axis)
+- The listed variables are FACTOR VARIABLES we can CHANGE (X-axis)
+- Recommendations MUST explain: "How to change [FACTOR] to improve [TARGET]"
+
+Write 5-7 insights. Each must include:
+1. **Bold headline** with the key finding
+2. Exact r and nPairs values
+3. Interpretation of the relationship
+4. **Actionable recommendation** that includes:
+   - Keep the current contextual recommendation (explaining the relationship)
+   - ADD a quantified recommendation with specific targets: "To improve ${targetVariable} to [target value], adjust [factor variable] to [specific value/range]"
+   - Use specific numbers from the quantified statistics above (optimal ranges, percentiles, averages)
+   - Example format: "**Current recommendation:** [explain relationship]. **Quantified Action:** To improve ${targetVariable} to P75 level ([target value]), adjust [factor] from current average ([current]) to optimal range ([optimal range]) or target value ([target value])."
+5. Reminder that correlation != causation
 
 Output JSON only: {"insights":[{"text":"..."}]}`;
 
@@ -307,7 +395,7 @@ Output JSON only: {"insights":[{"text":"..."}]}`;
     ],
     response_format: { type: 'json_object' },
     temperature: 0.7,
-    max_tokens: 1500,
+    max_tokens: 2000,
   });
 
   const content = response.choices[0].message.content || '{}';
@@ -316,7 +404,7 @@ Output JSON only: {"insights":[{"text":"..."}]}`;
     const parsed = JSON.parse(content);
     const insightArray = parsed.insights || [];
     
-    return insightArray.slice(0, 5).map((item: any, index: number) => ({
+    return insightArray.slice(0, 7).map((item: any, index: number) => ({
       id: index + 1,
       text: item.text || item.insight || String(item),
     }));
