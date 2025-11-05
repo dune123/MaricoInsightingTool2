@@ -151,6 +151,7 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
       dateColumns={dateColumns}
       totalRows={totalRows}
       totalColumns={totalColumns}
+      sessionId={sessionId!}
     />
   );
 }

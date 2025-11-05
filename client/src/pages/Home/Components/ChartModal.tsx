@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
@@ -28,6 +28,8 @@ interface ChartModalProps {
   isOpen: boolean;
   onClose: () => void;
   chart: ChartSpec;
+  sessionId?: string;
+  chartIndex?: number;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -58,8 +60,39 @@ const formatAxisLabel = (value: number): string => {
   return value.toFixed(0);
 };
 
-export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
-  const { type, title, data = [], x, y, xDomain, yDomain, trendLine, xLabel, yLabel } = chart;
+export function ChartModal({ isOpen, onClose, chart, sessionId, chartIndex }: ChartModalProps) {
+  const [series, setSeries] = useState<any[]>(chart.data || []);
+  const { type, title, x, y, xDomain, yDomain, trendLine, xLabel, yLabel } = chart as any;
+
+  // Reset series when chart changes or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setSeries(chart.data || []);
+    }
+  }, [isOpen, chart]);
+
+  useEffect(() => {
+    let abort = false;
+    async function maybeFetch() {
+      if (!isOpen) return;
+      if (Array.isArray(series) && series.length > 0) return;
+      if (!sessionId || typeof chartIndex !== 'number') return;
+      const blobName = (chart as any)?.dataRef?.blobName;
+      if (!blobName) return;
+      try {
+        const resp = await fetch(`/api/charts/${encodeURIComponent(sessionId)}/${chartIndex}/full`);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        if (!abort && Array.isArray(json.series)) {
+          setSeries(json.series);
+        }
+      } catch {}
+    }
+    maybeFetch();
+    return () => { abort = true; };
+  }, [isOpen, sessionId, chartIndex, series.length, (chart as any)?.dataRef?.blobName]);
+
+  const data = series || [];
   const chartColor = COLORS[0]; // Use primary color for modal
 
   const renderChart = () => {

@@ -1,4 +1,5 @@
 import { BlobServiceClient, BlockBlobClient, StorageSharedKeyCredential, BlobSASPermissions } from "@azure/storage-blob";
+import { parseFile } from "./fileParser.js";
 
 // Azure Blob Storage configuration
 const AZURE_STORAGE_ACCOUNT_NAME = process.env.AZURE_STORAGE_ACCOUNT_NAME || "";
@@ -200,4 +201,28 @@ export const generateSasUrl = async (
     console.error("❌ Failed to generate SAS URL:", error);
     throw error;
   }
+};
+
+// Load and parse structured data from blob storage
+export const loadAndParseFromBlob = async (
+  blobName: string,
+  originalFileName: string
+): Promise<Record<string, any>[]> => {
+  const buffer = await getFileFromBlob(blobName);
+  const data = await parseFile(buffer, originalFileName);
+  return data as Record<string, any>[];
+};
+
+// Upload JSON content to blob storage at a given path
+export const uploadJsonToBlob = async (
+  content: any,
+  blobPath: string
+): Promise<{ blobUrl: string; blobName: string }> => {
+  const json = JSON.stringify(content);
+  const buffer = Buffer.from(json, 'utf-8');
+  const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
+  await blockBlobClient.upload(buffer, buffer.length, {
+    blobHTTPHeaders: { blobContentType: 'application/json' },
+  });
+  return { blobUrl: blockBlobClient.url, blobName: blobPath };
 };

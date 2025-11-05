@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChartSpec } from '@shared/schema';
 import { ChartModal } from './ChartModal';
 import { ChartOnlyModal } from '@/pages/Dashboard/Components/ChartOnlyModal';
@@ -33,6 +33,7 @@ interface ChartRendererProps {
   showAddButton?: boolean;
   useChartOnlyModal?: boolean;
   fillParent?: boolean;
+  sessionId?: string;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -56,11 +57,39 @@ const formatAxisLabel = (value: number): string => {
   return value.toFixed(0);
 };
 
-export function ChartRenderer({ chart, index, isSingleChart = false, showAddButton = true, useChartOnlyModal = false, fillParent = false }: ChartRendererProps) {
+export function ChartRenderer({ chart, index, isSingleChart = false, showAddButton = true, useChartOnlyModal = false, fillParent = false, sessionId }: ChartRendererProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
-  const { type, title, data = [], x, y, xDomain, yDomain, trendLine, xLabel, yLabel } = chart;
+  const [series, setSeries] = useState<any[]>(chart.data || []);
+  const { type, title, x, y, xDomain, yDomain, trendLine, xLabel, yLabel } = chart as any;
   const chartColor = COLORS[index % COLORS.length];
+
+  // Reset series when chart changes
+  useEffect(() => {
+    setSeries(chart.data || []);
+  }, [chart]);
+
+  useEffect(() => {
+    let abort = false;
+    async function maybeFetch() {
+      if (Array.isArray(series) && series.length > 0) return;
+      if (!sessionId) return;
+      const blobName = (chart as any)?.dataRef?.blobName;
+      if (!blobName) return;
+      try {
+        const resp = await fetch(`/api/charts/${encodeURIComponent(sessionId)}/${index}/full`);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        if (!abort && Array.isArray(json.series)) {
+          setSeries(json.series);
+        }
+      } catch {}
+    }
+    maybeFetch();
+    return () => { abort = true; };
+  }, [sessionId, index, series.length, (chart as any)?.dataRef?.blobName]);
+
+  const data = series || [];
 
   const renderChart = () => {
     switch (type) {
@@ -396,12 +425,16 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           chart={chart}
+          sessionId={sessionId}
+          chartIndex={index}
         />
       ) : (
       <ChartModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         chart={chart}
+        sessionId={sessionId}
+        chartIndex={index}
       />
       )}
       <DashboardModal

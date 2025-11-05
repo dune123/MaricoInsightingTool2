@@ -66,7 +66,7 @@ export interface ChatDocument {
   insights: Insight[]; // AI-generated insights from data analysis
   sessionId: string; // Original session ID
   // Enhanced analysis data storage
-  rawData: Record<string, any>[]; // Complete raw data from uploaded file
+  rawData?: Record<string, any>[]; // Complete raw data from uploaded file (may be omitted for large files)
   sampleRows: Record<string, any>[]; // Sample rows for preview (first 10)
   columnStatistics: Record<string, any>; // Statistical analysis of numeric columns
   blobInfo?: { // Azure Blob Storage information

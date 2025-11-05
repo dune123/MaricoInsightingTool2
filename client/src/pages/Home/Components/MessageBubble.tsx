@@ -12,6 +12,7 @@ interface MessageBubbleProps {
   dateColumns?: string[];
   totalRows?: number;
   totalColumns?: number;
+  sessionId?: string;
 }
 
 export function MessageBubble({ 
@@ -21,7 +22,8 @@ export function MessageBubble({
   numericColumns,
   dateColumns,
   totalRows,
-  totalColumns
+  totalColumns,
+  sessionId
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
@@ -74,6 +76,7 @@ export function MessageBubble({
                 chart={chart} 
                 index={idx}
                 isSingleChart={message.charts!.length === 1}
+                sessionId={sessionId}
               />
             ))}
           </div>

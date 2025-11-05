@@ -42,7 +42,8 @@ export function ChatInterface({
   numericColumns,
   dateColumns,
   totalRows,
-  totalColumns
+  totalColumns,
+  sessionId
 }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -95,6 +96,7 @@ export function ChatInterface({
               dateColumns={idx === 0 ? dateColumns : undefined}
               totalRows={idx === 0 ? totalRows : undefined}
               totalColumns={idx === 0 ? totalColumns : undefined}
+              sessionId={sessionId}
             />
           ))}
           

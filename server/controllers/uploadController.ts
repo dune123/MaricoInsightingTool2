@@ -3,10 +3,10 @@ import { parseFile, createDataSummary } from "../lib/fileParser.js";
 import { analyzeUpload } from "../lib/dataAnalyzer.js";
 import { uploadResponseSchema } from "@shared/schema.js";
 import { createChatDocument, generateColumnStatistics } from "../lib/cosmosDB.js";
-import { uploadFileToBlob } from "../lib/blobStorage.js";
+import { uploadFileToBlob, uploadJsonToBlob } from "../lib/blobStorage.js";
 
 export const uploadFile = async (
-  req: Request & { file?: Express.Multer.File },
+  req: Request & { file?: any },
   res: Response
 ) => {
   const startTime = Date.now();
@@ -61,28 +61,67 @@ export const uploadFile = async (
       }
     });
 
-    // Sanitize charts to remove rows with any NaN values
+    // Sanitize charts and prepare preview + dataRef
     console.log('🧹 Sanitizing charts...');
-    const sanitizedCharts = charts.map((chart, index) => {
+    const PREVIEW_CAP = 0; // store no chart points in Cosmos
+    const timestampForCharts = Date.now();
+    const safeUser = (username as string).toString().replace(/[^a-zA-Z0-9]/g, '_');
+    const safeFile = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+    const sanitizedCharts = await Promise.all(charts.map(async (chart, index) => {
       const originalLength = chart.data?.length || 0;
       const sanitizedData = chart.data?.filter(row => {
-        // Filter out rows that contain any NaN values
         return !Object.values(row).some(value => typeof value === 'number' && isNaN(value));
       }) || [];
-      
+
       console.log(`Chart ${index + 1} sanitization: ${originalLength} → ${sanitizedData.length} data points`);
-      
-      return {
-        ...chart,
-        data: sanitizedData
+
+      // Upload full series to blob as JSON if present
+      let dataRef: { blobName: string; kind: string } | undefined = undefined;
+      if (sanitizedData.length > 0) {
+        const chartBlobName = `${safeUser}/${timestampForCharts}/${safeFile}.chart-${index}.json`;
+        try {
+          await uploadJsonToBlob(sanitizedData, chartBlobName);
+          dataRef = { blobName: chartBlobName, kind: 'chartSeries' };
+        } catch (e) {
+          console.error('Failed to upload chart series to blob:', e);
+        }
+      }
+
+      // Keep no data in Cosmos; rely on dataRef to blob
+      const preview = sanitizedData.slice(0, PREVIEW_CAP);
+      const slim: any = {
+        title: (chart as any).title,
+        type: (chart as any).type,
+        x: (chart as any).x,
+        y: (chart as any).y,
+        xLabel: (chart as any).xLabel,
+        yLabel: (chart as any).yLabel,
+        options: (chart as any).options || undefined,
+        data: [],
+        dataRef,
       };
-    });
+      if ((chart as any).keyInsight) slim.keyInsight = (chart as any).keyInsight;
+      if ((chart as any).recommendation) slim.recommendation = (chart as any).recommendation;
+      return slim;
+    }));
 
     // Generate a unique session ID for this upload
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Generate column statistics for numeric columns
     const columnStatistics = generateColumnStatistics(data, summary.numericColumns);
+    // Upload column statistics to blob and avoid storing large stats in Cosmos
+    let statsRef: { blobName: string; kind: string } | undefined = undefined;
+    try {
+      if (columnStatistics && Object.keys(columnStatistics).length > 0) {
+        const statsBlobName = `${safeUser}/${timestampForCharts}/${safeFile}.columnStatistics.json`;
+        await uploadJsonToBlob(columnStatistics, statsBlobName);
+        statsRef = { blobName: statsBlobName, kind: 'columnStatistics' };
+      }
+    } catch (e) {
+      console.error('Failed to upload column statistics to blob:', e);
+    }
     
     // Get top 10 rows as sample data for preview, converting dates to strings
     const sampleRows = data.slice(0, 10).map(row => {
@@ -104,15 +143,42 @@ export const uploadFile = async (
     // Create chat document in CosmosDB with all analysis data
     let chatDocument;
     try {
+      // Cap insights size to keep payload small
+      const cappedInsights = Array.isArray(insights)
+        ? insights.slice(0, 5).map((ins: any, i: number) => ({ id: ins.id ?? i + 1, text: String(ins.text || '').slice(0, 300) }))
+        : [];
+
+      // Column stats will be loaded from blob; store empty in Cosmos
+      const columnStatsForCosmos = {} as Record<string, any>;
+
+      // Safety: if payload still large, drop preview data entirely
+      const roughSizeInBytes = (obj: any) => Buffer.byteLength(JSON.stringify(obj), 'utf-8');
+      const baseDocForSize = {
+        summary,
+        charts: sanitizedCharts,
+        insights: cappedInsights,
+        sampleRows,
+        columnStatistics: columnStatsForCosmos,
+        statsRef,
+      };
+      let estSize = roughSizeInBytes(baseDocForSize);
+      if (estSize > 1.6 * 1024 * 1024) {
+        console.warn(`⚠️ Payload estimate ${Math.round(estSize/1024)}KB too large, removing chart previews to fit.`);
+        for (let i = 0; i < sanitizedCharts.length; i++) {
+          (sanitizedCharts[i] as any).data = [];
+          (sanitizedCharts[i] as any).options = undefined;
+        }
+      }
+
       chatDocument = await createChatDocument(
         username,
         req.file.originalname,
         sessionId,
         summary,
         sanitizedCharts,
-        data, // Raw data
+        [], // Do NOT store raw data in CosmosDB; rely on blob storage
         sampleRows, // Sample rows
-        columnStatistics, // Column statistics
+        columnStatsForCosmos, // Column statistics kept empty; use statsRef
         blobInfo ? {
           blobUrl: blobInfo.blobUrl,
           blobName: blobInfo.blobName,
@@ -123,7 +189,7 @@ export const uploadFile = async (
           fileSize: req.file.size,
           analysisVersion: '1.0.0'
         }, // Analysis metadata
-        insights // AI-generated insights
+        cappedInsights // AI-generated insights (capped)
       );
     } catch (cosmosError) {
       console.error("Failed to create chat document in CosmosDB:", cosmosError);

@@ -5,6 +5,7 @@ import {
   getChatBySessionIdEfficient,
   ChatDocument 
 } from "../lib/cosmosDB.js";
+import { loadAndParseFromBlob } from "../lib/blobStorage.js";
 
 // Get all analysis sessions for a user
 export const getUserAnalysisSessions = async (req: Request, res: Response) => {
@@ -61,7 +62,14 @@ export const getAnalysisData = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Analysis data not found' });
     }
 
-    // Return complete analysis data
+    // Ensure raw data present (fallback to blob if needed)
+    const rawData = (Array.isArray(chatDocument.rawData) && chatDocument.rawData.length > 0)
+      ? chatDocument.rawData
+      : (chatDocument.blobInfo?.blobName
+          ? await loadAndParseFromBlob(chatDocument.blobInfo.blobName, chatDocument.fileName)
+          : []);
+
+    // Return complete analysis data (charts without inline data; use dataRef)
     res.json({
       id: chatDocument.id,
       fileName: chatDocument.fileName,
@@ -69,10 +77,22 @@ export const getAnalysisData = async (req: Request, res: Response) => {
       createdAt: chatDocument.createdAt,
       lastUpdatedAt: chatDocument.lastUpdatedAt,
       dataSummary: chatDocument.dataSummary,
-      rawData: chatDocument.rawData,
+      rawData,
       sampleRows: chatDocument.sampleRows,
       columnStatistics: chatDocument.columnStatistics,
-      charts: chatDocument.charts,
+      charts: Array.isArray(chatDocument.charts) ? chatDocument.charts.map((c: any) => ({
+        title: c.title,
+        type: c.type,
+        x: c.x,
+        y: c.y,
+        xLabel: c.xLabel,
+        yLabel: c.yLabel,
+        options: c.options,
+        keyInsight: c.keyInsight,
+        recommendation: c.recommendation,
+        data: [],
+        dataRef: c.dataRef,
+      })) : [],
       insights: chatDocument.insights || [],
       messages: chatDocument.messages,
       blobInfo: chatDocument.blobInfo,
@@ -98,7 +118,14 @@ export const getAnalysisDataBySession = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Analysis data not found for this session' });
     }
 
-    // Return complete analysis data
+    // Ensure raw data present (fallback to blob if needed)
+    const rawData = (Array.isArray(chatDocument.rawData) && chatDocument.rawData.length > 0)
+      ? chatDocument.rawData
+      : (chatDocument.blobInfo?.blobName
+          ? await loadAndParseFromBlob(chatDocument.blobInfo.blobName, chatDocument.fileName)
+          : []);
+
+    // Return complete analysis data (charts without inline data; use dataRef)
     res.json({
       id: chatDocument.id,
       fileName: chatDocument.fileName,
@@ -106,10 +133,22 @@ export const getAnalysisDataBySession = async (req: Request, res: Response) => {
       createdAt: chatDocument.createdAt,
       lastUpdatedAt: chatDocument.lastUpdatedAt,
       dataSummary: chatDocument.dataSummary,
-      rawData: chatDocument.rawData,
+      rawData,
       sampleRows: chatDocument.sampleRows,
       columnStatistics: chatDocument.columnStatistics,
-      charts: chatDocument.charts,
+      charts: Array.isArray(chatDocument.charts) ? chatDocument.charts.map((c: any) => ({
+        title: c.title,
+        type: c.type,
+        x: c.x,
+        y: c.y,
+        xLabel: c.xLabel,
+        yLabel: c.yLabel,
+        options: c.options,
+        keyInsight: c.keyInsight,
+        recommendation: c.recommendation,
+        data: [],
+        dataRef: c.dataRef,
+      })) : [],
       insights: chatDocument.insights || [],
       messages: chatDocument.messages,
       blobInfo: chatDocument.blobInfo,
@@ -173,9 +212,16 @@ export const getRawData = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Analysis data not found' });
     }
 
+    // Ensure dataset loaded (fallback to blob if rawData missing)
+    const dataset = (Array.isArray(chatDocument.rawData) && chatDocument.rawData.length > 0)
+      ? chatDocument.rawData
+      : (chatDocument.blobInfo?.blobName
+          ? await loadAndParseFromBlob(chatDocument.blobInfo.blobName, chatDocument.fileName)
+          : []);
+
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedData = chatDocument.rawData.slice(startIndex, endIndex);
+    const paginatedData = dataset.slice(startIndex, endIndex);
 
     res.json({
       chatId: chatDocument.id,
@@ -184,9 +230,9 @@ export const getRawData = async (req: Request, res: Response) => {
       pagination: {
         page,
         limit,
-        totalRows: chatDocument.rawData.length,
-        totalPages: Math.ceil(chatDocument.rawData.length / limit),
-        hasNextPage: endIndex < chatDocument.rawData.length,
+        totalRows: dataset.length,
+        totalPages: Math.ceil(dataset.length / limit),
+        hasNextPage: endIndex < dataset.length,
         hasPrevPage: page > 1
       }
     });
