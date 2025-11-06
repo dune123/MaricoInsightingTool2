@@ -95,13 +95,13 @@ export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) 
                   />
                 </>
               ) : (
-                <YAxis
+              <YAxis
                   tick={{ fill: leftAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
                   stroke={leftAxisColor}
-                  tickFormatter={formatAxisLabel}
-                  width={90}
+                tickFormatter={formatAxisLabel}
+                width={90}
                   label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 16, fontWeight: 600 } }}
-                />
+              />
               )}
               <Tooltip
                 contentStyle={{
@@ -141,7 +141,7 @@ export function ChartOnlyModal({ isOpen, onClose, chart }: ChartOnlyModalProps) 
                   dot={{ r: 6 }}
                   activeDot={{ r: 8 }}
                   yAxisId="right"
-                />
+              />
               )}
             </LineChart>
           </ResponsiveContainer>

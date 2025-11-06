@@ -257,35 +257,35 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
             
             return (
               <div key={`${chart.title}-${index}`} className="rounded-lg border border-border bg-white/70 p-4 relative chart-group" ref={containerRef}>
-                <div className="relative mb-4">
+            <div className="relative mb-4">
                   <div className="absolute right-0 -top-2 z-20">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => onDeleteChart(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => onDeleteChart(index)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
                 <div className="relative w-full" style={{ minHeight: 'inherit' }}>
                   <div data-tile-container>
                     <ResizableTile id={`${dashboard.id}:chart:${index}`} minWidth={360} minHeight={240} className="flex-none" boundsSelector={`.chart-group:nth-of-type(${index + 1})`}>
-                      <div className="relative group h-full" data-chart-index={index}>
-                        <ChartRenderer
-                          chart={chart}
-                          index={index}
-                          isSingleChart={false}
-                          showAddButton={false}
-                          useChartOnlyModal
-                          fillParent
-                        />
-                      </div>
-                    </ResizableTile>
+                <div className="relative group h-full" data-chart-index={index}>
+                  <ChartRenderer
+                    chart={chart}
+                    index={index}
+                    isSingleChart={false}
+                    showAddButton={false}
+                    useChartOnlyModal
+                    fillParent
+                  />
+                </div>
+              </ResizableTile>
                   </div>
 
-                  {chart.keyInsight && (
+              {chart.keyInsight && (
                     <div data-tile-container>
                       <ResizableTile 
                         id={`${dashboard.id}:insight:${index}`} 
@@ -296,12 +296,12 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
                         defaultWidth={320}
                         defaultHeight={160}
                       >
-                        <InsightRecommendationTile variant="insight" text={chart.keyInsight} />
-                      </ResizableTile>
+                  <InsightRecommendationTile variant="insight" text={chart.keyInsight} />
+                </ResizableTile>
                     </div>
-                  )}
+              )}
 
-                  {chart.recommendation && (
+              {chart.recommendation && (
                     <div data-tile-container>
                       <ResizableTile 
                         id={`${dashboard.id}:rec:${index}`} 
@@ -312,12 +312,12 @@ export function DashboardView({ dashboard, onBack, onDeleteChart }: DashboardVie
                         defaultWidth={320}
                         defaultHeight={160}
                       >
-                        <InsightRecommendationTile variant="recommendation" text={chart.recommendation} />
-                      </ResizableTile>
+                  <InsightRecommendationTile variant="recommendation" text={chart.recommendation} />
+                </ResizableTile>
                     </div>
-                  )}
-                </div>
-              </div>
+              )}
+            </div>
+          </div>
             );
           };
           

@@ -83,17 +83,17 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
               />
               {chart.y2 ? (
                 <>
-                  <YAxis
+              <YAxis
                     tick={{ fill: leftAxisColor, fontSize: 10, fontWeight: 500 }}
-                    width={60}
-                    tickFormatter={formatAxisLabel}
+                width={60}
+                tickFormatter={formatAxisLabel}
                     label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 12, fontWeight: 600 } }}
-                    yAxisId="left"
+                yAxisId="left"
                     stroke={leftAxisColor}
-                  />
-                  <YAxis
-                    orientation="right"
-                    yAxisId="right"
+              />
+                <YAxis
+                  orientation="right"
+                  yAxisId="right"
                     tick={{ fill: rightAxisColor, fontSize: 10, fontWeight: 500 }}
                     width={60}
                     tickFormatter={formatAxisLabel}
