@@ -13,6 +13,12 @@ interface ResizableTileProps {
   className?: string;
   persist?: boolean;
   boundsSelector?: string; // CSS selector for draggable bounds
+  axis?: 'both' | 'x' | 'y';
+  lockFullWidth?: boolean; // when true, force tile to span full container width
+  autoPosition?: { x: number; y: number } | null; // Auto-position from parent
+  autoSize?: { width: number; height?: number } | null; // Auto-size from parent
+  onPositionChange?: (position: { x: number; y: number }) => void; // Callback when position changes
+  onSizeChange?: (size: { width: number; height: number }) => void; // Callback when size changes
 }
 
 export function ResizableTile({
@@ -25,6 +31,12 @@ export function ResizableTile({
   className = '',
   persist = true,
   boundsSelector = 'parent',
+  axis = 'both',
+  lockFullWidth = false,
+  autoPosition = null,
+  autoSize = null,
+  onPositionChange,
+  onSizeChange,
 }: ResizableTileProps) {
   const storageKey = useMemo(() => (id ? `dashboard-tile-size:${id}` : ''), [id]);
   const initialWidth: number | string = typeof defaultWidth === 'undefined' ? 'auto' : defaultWidth;
@@ -37,6 +49,7 @@ export function ResizableTile({
   const [isDragging, setIsDragging] = useState(false);
   const [maxWidth, setMaxWidth] = useState<number | undefined>(undefined);
   const [boundsElement, setBoundsElement] = useState<HTMLElement | null>(null);
+  const [dragBounds, setDragBounds] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -113,13 +126,19 @@ export function ResizableTile({
       if (thisTileIndex < 0 || thisTileIndex === 0) return; // First tile stays at (0,0)
       
       // Calculate Y position based on previous tiles' heights + gaps
+      // Use default heights: chart=330px, insight=150px, recommendation=150px
+      const defaultHeights = [330, 150, 150]; // Chart, Insight, Recommendation
       let calculatedY = 0;
       for (let i = 0; i < thisTileIndex; i++) {
         if (i < allTiles.length) {
           const prevTile = allTiles[i];
           if (prevTile) {
-            const prevHeight = prevTile.offsetHeight || (typeof minHeight === 'number' ? minHeight : 220);
-            calculatedY += prevHeight + 16; // 16px gap between tiles
+            // Try to get actual height, fallback to default height for this tile index
+            const prevHeight = prevTile.offsetHeight || defaultHeights[i] || (typeof minHeight === 'number' ? minHeight : 220);
+            calculatedY += prevHeight + 10; // 10px gap between stacked tiles
+          } else if (i < defaultHeights.length) {
+            // If tile doesn't exist yet, use default height
+            calculatedY += defaultHeights[i] + 10;
           }
         }
       }
@@ -169,32 +188,41 @@ export function ResizableTile({
         const parentWidth = chartGroup.clientWidth;
         const parentHeight = chartGroup.clientHeight;
         
-        // Calculate max width with margin
-        const margin = 32; // 16px margin on each side
-        const calculatedMaxWidth = parentWidth - margin;
-        setMaxWidth(Math.max(calculatedMaxWidth, Number(minWidth))); // Ensure maxWidth is at least minWidth
+        // Calculate max width - ensure tiles never exceed parent container width
+        // Account for container padding (p-4 = 16px on each side = 32px total)
+        // Also account for inner container padding if it exists
+        const containerPadding = 32;
+        const innerPadding = 0; // Additional padding if needed
+        const calculatedMaxWidth = Math.max(Number(minWidth), parentWidth - containerPadding - innerPadding);
         
-        // Get the inner container where tiles are positioned (relative container)
-        const innerContainer = chartGroup.querySelector('.relative.w-full') as HTMLElement;
+        // If lockFullWidth, force min and max width to container width
+        if (lockFullWidth) {
+          setMaxWidth(calculatedMaxWidth);
+          setSize(prev => ({ ...prev, width: calculatedMaxWidth }));
+        } else {
+          // Ensure maxWidth doesn't exceed parent container width
+          setMaxWidth(Math.max(calculatedMaxWidth, Number(minWidth))); // Ensure maxWidth is at least minWidth
+          
+          // Also constrain current width if it exceeds the parent container
+          const currentWidth = typeof size.width === 'number' ? size.width : (nodeRef.current?.offsetWidth || Number(minWidth));
+          if (currentWidth > calculatedMaxWidth) {
+            setSize(prev => ({ ...prev, width: Math.max(calculatedMaxWidth, Number(minWidth)) }));
+          }
+        }
         
-        // Account for the container's padding (p-4 = 16px on chart-group)
-        const padding = 16;
+        // Get the CollapsibleContent where tiles are positioned
+        // Tiles are inside CollapsibleContent, so we need to use that as bounds
+        // Radix UI adds data-radix-collapsible-content attribute to CollapsibleContent
+        const collapsibleContent = chartGroup.querySelector('[data-radix-collapsible-content]') as HTMLElement;
         
-        // Get the actual size of the tile
-        const tileWidth = typeof size.width === 'number' ? size.width : (nodeRef.current.offsetWidth || Number(minWidth));
-        const tileHeight = typeof size.height === 'number' ? size.height : (nodeRef.current.offsetHeight || Number(minHeight));
-        
-        // For react-draggable, bounds object values are relative to the element's starting position
-        // We want to allow movement within the entire container, so calculate max travel distance
-        // Left: can go to -padding (allowing some overlap)
-        // Right: can go right until tile's right edge reaches container's right edge
-        // Top: can go up to -padding
-        // Bottom: can go down until tile's bottom edge reaches container's bottom edge
-        
-        // Use the inner container (where tiles are positioned) as the bounds element
-        // This allows react-draggable to calculate bounds relative to that container
-        const boundsContainer = innerContainer || chartGroup;
+        // Use CollapsibleContent as bounds if available, otherwise use chart-group
+        // This ensures tiles can't be dragged outside the parent container boundaries
+        const boundsContainer = collapsibleContent || chartGroup;
         setBoundsElement(boundsContainer);
+        
+        // Using the element directly as bounds - react-draggable will handle all calculations
+        // This allows free movement in all directions (left, right, up, down) within the container
+        // The bounds ensure tiles never exceed the parent container boundaries
       }
     };
     
@@ -211,6 +239,11 @@ export function ResizableTile({
       const chartGroup = nodeRef.current?.closest('.chart-group');
       if (chartGroup) {
         observer.observe(chartGroup);
+        // Also observe CollapsibleContent if it exists
+        const collapsibleContent = chartGroup.querySelector('[data-radix-collapsible-content]') as HTMLElement;
+        if (collapsibleContent) {
+          observer.observe(collapsibleContent);
+        }
       }
     }, 100);
     
@@ -247,10 +280,23 @@ export function ResizableTile({
       const newWidth = typeof prev.width === 'string' ? prev.width : Number(prev.width) + d.width;
       const newHeight = typeof prev.height === 'string' ? prev.height : Number(prev.height) + d.height;
       
+      // Get the parent container to enforce width constraints
+      let actualMaxWidth = maxWidth || Infinity;
+      if (nodeRef.current) {
+        const chartGroup = nodeRef.current.closest('.chart-group') as HTMLElement;
+        if (chartGroup) {
+          const collapsibleContent = chartGroup.querySelector('[data-radix-collapsible-content]') as HTMLElement;
+          const boundsContainer = collapsibleContent || chartGroup;
+          const containerPadding = 32; // Account for container padding
+          const availableWidth = boundsContainer.clientWidth - containerPadding;
+          actualMaxWidth = Math.min(actualMaxWidth, availableWidth);
+        }
+      }
+      
       // Enforce min and max constraints
       const constrainedWidth = typeof newWidth === 'string' 
         ? newWidth 
-        : Math.max(Number(minWidth), Math.min(newWidth, maxWidth || Infinity));
+        : Math.max(Number(minWidth), Math.min(newWidth, actualMaxWidth));
       const constrainedHeight = typeof newHeight === 'string'
         ? newHeight
         : Math.max(Number(minHeight), newHeight);
@@ -259,6 +305,13 @@ export function ResizableTile({
         width: constrainedWidth,
         height: constrainedHeight,
       };
+      
+      // Notify parent of size change
+      if (onSizeChange) {
+        const widthNum = typeof constrainedWidth === 'number' ? constrainedWidth : (typeof constrainedWidth === 'string' ? parseInt(constrainedWidth) : 0);
+        const heightNum = typeof constrainedHeight === 'number' ? constrainedHeight : (typeof constrainedHeight === 'string' ? parseInt(constrainedHeight) : 0);
+        onSizeChange({ width: widthNum, height: heightNum });
+      }
       
       // persist size together with current position
       if (persist && storageKey) {
@@ -271,13 +324,79 @@ export function ResizableTile({
     });
   };
 
-  const onDragStart = () => setIsDragging(true);
+  const onDragStart = () => {
+    setIsDragging(true);
+    // Recalculate bounds when drag starts to ensure they're accurate
+    if (nodeRef.current && boundsElement) {
+      // Trigger bounds recalculation
+      const updateBounds = () => {
+        if (!nodeRef.current || !boundsElement) return;
+        // The bounds element is already set, react-draggable will use it
+        // But we can force a recalculation by checking if element still exists
+        const chartGroup = nodeRef.current.closest('.chart-group') as HTMLElement;
+        if (chartGroup) {
+          const collapsibleContent = chartGroup.querySelector('[data-radix-collapsible-content]') as HTMLElement;
+          const newBoundsContainer = collapsibleContent || chartGroup;
+          if (newBoundsContainer !== boundsElement) {
+            setBoundsElement(newBoundsContainer);
+          }
+        }
+      };
+      setTimeout(updateBounds, 0);
+    }
+  };
+  // Handle auto-position updates (only when not dragging)
+  useEffect(() => {
+    if (autoPosition && !isDragging) {
+      setPosition(autoPosition);
+      if (onPositionChange) {
+        onPositionChange(autoPosition);
+      }
+      // Save auto-position to localStorage
+      if (persist && storageKey) {
+        const saved = localStorage.getItem(storageKey);
+        let base: any = {};
+        try { base = saved ? JSON.parse(saved) : {}; } catch {}
+        localStorage.setItem(storageKey, JSON.stringify({ ...base, posX: autoPosition.x, posY: autoPosition.y }));
+      }
+    }
+  }, [autoPosition, isDragging, persist, storageKey, onPositionChange]);
+
+  // Handle auto-size updates
+  useEffect(() => {
+    if (autoSize && !isDragging) {
+      setSize(prev => ({
+        width: autoSize.width,
+        height: autoSize.height !== undefined ? autoSize.height : prev.height
+      }));
+      // Save auto-size to localStorage
+      if (persist && storageKey) {
+        const saved = localStorage.getItem(storageKey);
+        let base: any = {};
+        try { base = saved ? JSON.parse(saved) : {}; } catch {}
+        localStorage.setItem(storageKey, JSON.stringify({ 
+          ...base, 
+          width: autoSize.width, 
+          height: autoSize.height !== undefined ? autoSize.height : base.height 
+        }));
+      }
+    }
+  }, [autoSize, isDragging, persist, storageKey]);
+
   const onDrag = (_e: DraggableEvent, data: DraggableData) => {
-    setPosition({ x: data.x, y: data.y });
+    const newPosition = { x: data.x, y: data.y };
+    setPosition(newPosition);
+    if (onPositionChange) {
+      onPositionChange(newPosition);
+    }
   };
   const onDragStop = (_e: DraggableEvent, data: DraggableData) => {
     setIsDragging(false);
-    setPosition({ x: data.x, y: data.y });
+    const newPosition = { x: data.x, y: data.y };
+    setPosition(newPosition);
+    if (onPositionChange) {
+      onPositionChange(newPosition);
+    }
     if (persist && storageKey) {
       const saved = localStorage.getItem(storageKey);
       let base: any = {};
@@ -286,11 +405,13 @@ export function ResizableTile({
     }
   };
 
-  // Get bounds - react-draggable accepts HTMLElement refs
-  const getBounds = (): string | HTMLElement | {left: number, top: number, right: number, bottom: number} => {
+  // Use the bounds container element directly - react-draggable handles this better
+  // This allows dragging in all directions (left, right, up, down) within the container
+  const getBounds = (): HTMLElement | string => {
     if (boundsElement) {
       return boundsElement;
     }
+    // Fallback to parent if boundsElement not set yet
     return 'parent';
   };
 
@@ -299,50 +420,51 @@ export function ResizableTile({
       handle=".drag-handle"
       cancel='[class*="resizable-handle"]'
       bounds={getBounds() as any}
+      axis={axis}
       position={position}
       onStart={onDragStart}
       onDrag={onDrag}
       onStop={onDragStop}
       nodeRef={nodeRef}
     >
-      <div ref={nodeRef} style={{ position: 'relative', zIndex: isDragging ? 50 : 'auto' }}>
+      <div ref={nodeRef} style={{ position: 'absolute', zIndex: isDragging ? 50 : 'auto' }}>
         <Resizable
           size={size}
           onResize={handleResize}
           onResizeStop={handleResizeStop}
-          minWidth={minWidth}
+          minWidth={lockFullWidth ? (maxWidth || 0) : minWidth}
           minHeight={minHeight}
-          maxWidth={maxWidth}
+          maxWidth={lockFullWidth ? (maxWidth || 0) : maxWidth}
           style={{ flex: 'none', boxSizing: 'border-box' }}
           enable={{
             top: true,
-            right: true,
+            right: !lockFullWidth,
             bottom: true,
-            left: true,
-            topRight: true,
-            bottomRight: true,
-            bottomLeft: true,
-            topLeft: true,
+            left: !lockFullWidth,
+            topRight: !lockFullWidth,
+            bottomRight: !lockFullWidth,
+            bottomLeft: !lockFullWidth,
+            topLeft: !lockFullWidth,
           }}
           handleStyles={{
             top: { cursor: 'ns-resize' },
-            right: { cursor: 'ew-resize' },
+            right: { cursor: lockFullWidth ? 'default' : 'ew-resize' },
             bottom: { cursor: 'ns-resize' },
-            left: { cursor: 'ew-resize' },
-            topRight: { cursor: 'ne-resize' },
-            bottomRight: { cursor: 'se-resize' },
-            bottomLeft: { cursor: 'sw-resize' },
-            topLeft: { cursor: 'nw-resize' },
+            left: { cursor: lockFullWidth ? 'default' : 'ew-resize' },
+            topRight: { cursor: lockFullWidth ? 'default' : 'ne-resize' },
+            bottomRight: { cursor: lockFullWidth ? 'default' : 'se-resize' },
+            bottomLeft: { cursor: lockFullWidth ? 'default' : 'sw-resize' },
+            topLeft: { cursor: lockFullWidth ? 'default' : 'nw-resize' },
           }}
           className={`bg-white border border-border rounded-lg shadow-sm overflow-hidden ${className}`}
         >
-          <div className="h-full w-full relative flex flex-col pt-8">
+          <div className="h-full w-full relative flex flex-col pt-4">
             <div
-              className="drag-handle absolute left-0 top-0 w-full h-8 flex items-center gap-2 pl-2 text-muted-foreground cursor-grab active:cursor-grabbing bg-gradient-to-b from-muted/70 to-transparent z-10 flex-shrink-0"
+              className="drag-handle absolute left-0 top-0 w-full h-4 flex items-center gap-1 pl-2 text-muted-foreground cursor-grab active:cursor-grabbing bg-gradient-to-b from-muted/60 to-transparent z-10 flex-shrink-0"
               aria-label="Drag tile"
             >
               <GripVertical className="h-4 w-4" />
-              <span className="text-xs">Drag</span>
+              <span className="text-[10px]">Drag</span>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
             {children}

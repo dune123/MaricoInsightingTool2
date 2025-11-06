@@ -159,20 +159,21 @@ export async function generateChartInsights(
     const trend = isNaN(r) ? '' : r > 0.15 ? 'positive' : r < -0.15 ? 'negative' : 'weak';
     const strength = isNaN(r) ? '' : Math.abs(r) > 0.7 ? 'strong' : Math.abs(r) > 0.4 ? 'moderate' : 'weak';
 
+    // Concise insight (1–2 sentences) focused on chart specifics
     const keyInsight = isNaN(r)
-      ? `Observed ${pairs.length} valid points. ${chartSpec.y} ranges ${formatY(minY)}–${formatY(maxY)} (avg ${formatY(avgY)}, median ${formatY(yMedian)}). Top 20% performers achieve ${chartSpec.y} ≥ ${formatY(yP80)}.`
-      : `Observed ${pairs.length} valid points with ${strength} ${trend} correlation (r=${roundSmart(r)}). ${chartSpec.y} ranges ${formatY(minY)}–${formatY(maxY)} (avg ${formatY(avgY)}, median ${formatY(yMedian)}). Top 20% performers achieve ${chartSpec.y} ≥ ${formatY(yP80)}.`;
+      ? `${chartSpec.y} spans ${formatY(minY)}–${formatY(maxY)} (avg ${formatY(avgY)}). Top 20% outcomes are ≥${formatY(yP80)}.`
+      : `${strength} ${trend} correlation (r=${roundSmart(r)}) between ${chartSpec.x} and ${chartSpec.y}. ${chartSpec.y} ranges ${formatY(minY)}–${formatY(maxY)} (avg ${formatY(avgY)}).`;
 
-    // Enhanced recommendation with multiple performance tiers
+    // Concise recommendation with clear numeric target/range on X
     let recommendation = '';
     if (xInTop20.length > 0) {
-      if (xInTop10.length > 0 && !isNaN(avgXTop10)) {
-        recommendation = `To achieve top-10% ${chartSpec.y} outcomes (≥${formatY(yP90)}): target ${chartSpec.x} around ${roundSmart(avgXTop10)} (range ${roundSmart(xLow10)}–${roundSmart(xHigh10)}). For top-20% outcomes (≥${formatY(yP80)}): maintain ${chartSpec.x} between ${roundSmart(xLow20)}–${roundSmart(xHigh20)}. Current average ${chartSpec.x} is ${roundSmart(avgXTop20)}, which supports P75 performance (${formatY(yP75)}).`;
-      } else {
-        recommendation = `Maintain ${chartSpec.x} within ${roundSmart(xLow20)}–${roundSmart(xHigh20)} to achieve top-20% ${chartSpec.y} outcomes (≥${formatY(yP80)}). Target optimal range around ${roundSmart(avgXTop20)} for best results. Current average supports ${formatY(yP75)} performance level.`;
-      }
+      const xLow = isNaN(xLow20) ? roundSmart(percentile(numericX, 0.25)) : roundSmart(xLow20);
+      const xHigh = isNaN(xHigh20) ? roundSmart(percentile(numericX, 0.75)) : roundSmart(xHigh20);
+      recommendation = `To reach ≥P80 ${chartSpec.y} (${formatY(yP80)}), keep ${chartSpec.x} in ${xLow}–${xHigh}; current avg ≈${roundSmart(avgXTop20)}.`;
     } else {
-      recommendation = `Target ${chartSpec.y} above ${formatY(yP75)} (P75) for competitive performance. Current range suggests focusing on ${chartSpec.x} values between ${roundSmart(percentile(numericX, 0.25))}–${roundSmart(percentile(numericX, 0.75))} to align with median ${chartSpec.y} of ${formatY(yMedian)}.`;
+      const xP25Str = roundSmart(percentile(numericX, 0.25));
+      const xP75Str = roundSmart(percentile(numericX, 0.75));
+      recommendation = `Aim for ${chartSpec.y} ≥P75 (${formatY(yP75)}); adjust ${chartSpec.x} toward ${xP25Str}–${xP75Str}.`;
     }
 
     return { keyInsight, recommendation };
@@ -273,113 +274,22 @@ RECOMMENDATION FORMAT:
 
 ` : '';
 
-  const prompt = `Analyze this specific chart and provide 3-5 comprehensive key insights with quantified recommendations. Each insight must be detailed and actionable.
+  const prompt = `Return JSON with exactly two short fields for this chart: keyInsight and recommendation. Each must be 1–2 sentences (≤220 chars), chart-specific, and include concrete numbers. No bullets.
+
+CHART CONTEXT
+- Type: ${chartSpec.type}
+- Title: ${chartSpec.title}
+- X: ${chartSpec.x}${isCorrelationChart ? ' (FACTOR)' : ''}
+- Y: ${chartSpec.y}${isCorrelationChart ? ' (TARGET)' : ''}${isDualAxis ? ` | Y2: ${y2Label}` : ''}
+- Points: ${chartData.length}
+- Y stats: ${formatY(minY)}–${formatY(maxY)} (avg ${formatY(avgY)}, P75 ${formatY(yP75)})${isDualAxis ? ` | Y2: ${formatY2(minY2)}–${formatY2(maxY2)} (avg ${formatY2(avgY2)})` : ''}
 
 ${correlationContext}
 
-CHART DETAILS:
-- Type: ${chartSpec.type}
-- Title: ${chartSpec.title}
-- X-axis: ${chartSpec.x}${isCorrelationChart ? ` (FACTOR - what we can change to impact ${targetVariable})` : ''}
-- Y-axis (Left): ${chartSpec.y}${isCorrelationChart ? ` (TARGET - what we want to improve)` : ''}${isDualAxis ? ` - First variable on left axis` : ''}
-${isDualAxis ? `- Y-axis (Right): ${y2Label} - Second variable on right axis` : ''}
-- Data points: ${chartData.length}
-${isCorrelationChart ? `- Correlation: This chart shows how ${factorVariable} affects ${targetVariable}` : ''}
-
-COMPREHENSIVE STATISTICS FOR ${chartSpec.y} (Left Axis):
-- Range: ${formatY(minY)} to ${formatY(maxY)}
-- Average: ${formatY(avgY)}
-- Median (P50): ${formatY(yMedian)}
-- 25th percentile (P25): ${formatY(yP25)}
-- 75th percentile (P75): ${formatY(yP75)}
-- 90th percentile (P90): ${formatY(yP90)}
-- Standard deviation: ${roundSmart(yStdDev)}
-- Coefficient of variation: ${roundSmart(cv)}% (${variability} variability)
-
-TOP PERFORMERS for ${chartSpec.y} (highest values):
-${topPerformerStr}
-
-BOTTOM PERFORMERS for ${chartSpec.y} (lowest values):
-${bottomPerformerStr}
-
-${isDualAxis ? `
-COMPREHENSIVE STATISTICS FOR ${y2Label} (Right Axis):
-- Range: ${formatY2(minY2)} to ${formatY2(maxY2)}
-- Average: ${formatY2(avgY2)}
-- Median (P50): ${formatY2(y2Median)}
-- 25th percentile (P25): ${formatY2(y2P25)}
-- 75th percentile (P75): ${formatY2(y2P75)}
-- 90th percentile (P90): ${formatY2(y2P90)}
-- Standard deviation: ${roundSmart(y2StdDev)}
-- Coefficient of variation: ${roundSmart(y2CV)}% (${y2Variability} variability)
-
-TOP PERFORMERS for ${y2Label} (highest values):
-${topPerformerStrY2}
-
-BOTTOM PERFORMERS for ${y2Label} (lowest values):
-${bottomPerformerStrY2}
-` : ''}
-
-${topCategories ? `TOP CATEGORIES:\n${topCategories}\n` : ''}
-
-SAMPLE DATA (first 5 points):
-${chartData.slice(0, 5).map((row, idx) => `${idx + 1}. ${row[chartSpec.x]}: ${chartSpec.y}=${row[chartSpec.y]}${isDualAxis ? `, ${y2Label}=${row[y2Variable]}` : ''}`).join('\n')}
-
-Generate 3-5 insights. Each insight MUST follow this exact format:
-
-**1. [Bold Title/Headline]**
-[Observation with specific numbers and metrics from the statistics above. Include actual values like ranges, averages, percentiles, top/bottom performers.]
-
-**Why it matters:** [Business impact explanation - 2-3 sentences explaining WHY this finding is important for the business]
-
-**Actionable Recommendation:** [Quantified recommendation with specific targets - ${isCorrelationChart ? `explain how to CHANGE ${factorVariable} to IMPROVE ${targetVariable}` : 'include specific numbers, percentages, or thresholds'}]
-
-${isCorrelationChart ? `
-FOR CORRELATION CHARTS - Each recommendation must:
-- Explain how to CHANGE ${factorVariable} (X-axis) to IMPROVE ${targetVariable} (Y-axis)
-- Use specific X-axis values/ranges: "adjust ${factorVariable} to ${formatX(xRangeForTopY?.p75 || xP75)}"
-- Reference optimal X values from top Y performers: "target ${formatX(avgXForTopY)}"
-` : `
-FOR ALL CHARTS - Each recommendation must:
-- Include explicit numeric targets (e.g., "target ${chartSpec.y} above ${formatY(yP75)}")
-- Reference specific categories/values (e.g., "prioritize ${topPerformers.length > 0 ? topPerformers[0].x : 'top performers'}")
-- Include quantified improvement goals (e.g., "increase by 15%", "reach P75 level")
-`}
-
-CRITICAL REQUIREMENTS:
-${isDualAxis ? `
-🚨 MANDATORY FOR DUAL-AXIS CHARTS 🚨
-- This is a DUAL-AXIS LINE CHART with TWO variables: ${chartSpec.y} (left axis) and ${y2Label} (right axis)
-- You MUST generate insights for BOTH variables - this is REQUIRED, not optional
-- Generate at least 3-5 insights total, with MINIMUM 2 insights for ${chartSpec.y} and MINIMUM 2 insights for ${y2Label}
-- Each insight should clearly specify which variable it addresses:
-  * Insights 1-2: Focus on ${chartSpec.y} (left axis) - use statistics from "COMPREHENSIVE STATISTICS FOR ${chartSpec.y}"
-  * Insights 3-4: Focus on ${y2Label} (right axis) - use statistics from "COMPREHENSIVE STATISTICS FOR ${y2Label}"
-  * Insight 5 (optional): Comparative analysis between both variables
-- DO NOT generate insights that only mention ${chartSpec.y} - you MUST include insights for ${y2Label}
-- Every insight must reference the specific variable name (${chartSpec.y} or ${y2Label}) in the title or observation
-- If you only analyze ${chartSpec.y}, your response is INCOMPLETE and INCORRECT
-` : `
-- Generate 3-5 distinct insights covering different aspects of the data
-`}
-- Each insight must have specific numbers from the statistics above
-- Use ACTUAL values - no vague language
-- Insights should cover: performance patterns, variability, top/bottom performers, percentile analysis, and actionable targets
-${isCorrelationChart ? `
-- All recommendations must focus on "how to change ${factorVariable} to improve ${targetVariable}"
-` : ''}
-
-Output JSON:
+OUTPUT JSON (exact keys only):
 {
-  "insights": [
-    {
-      "title": "**Bold Title Here**",
-      "observation": "Observation with specific numbers...",
-      "whyItMatters": "Why this matters for the business...",
-      "recommendation": "Quantified actionable recommendation with specific targets..."
-    },
-    ...
-  ]
+  "keyInsight": "1–2 sentences, chart-specific with numbers",
+  "recommendation": "1–2 sentences with a numeric target/range on ${chartSpec.x} or ${chartSpec.y}"
 }`;
 
   try {
@@ -388,37 +298,13 @@ Output JSON:
       messages: [
         {
           role: 'system',
-          content: isCorrelationChart 
-            ? `You are a data analyst providing specific insights and recommendations for correlation/impact analysis charts. 
-            CRITICAL CONTEXT: 
-            - Y-axis (${targetVariable}) = TARGET we want to IMPROVE
-            - X-axis (${factorVariable}) = FACTOR we can CHANGE
-            - Recommendations MUST explain: "How to CHANGE ${factorVariable} to IMPROVE ${targetVariable}"
-            - Use specific X-axis values/ranges from the statistics provided
-            - Be concise, specific, and actionable. Output valid JSON. 
-            - Recommendations must be quantified with actual numbers from the data (ranges, thresholds, targets). No hallucinations.`
-            : isDualAxis 
-            ? `You are a data analyst providing specific insights and recommendations for dual-axis line charts. 
-            🚨 CRITICAL MANDATORY REQUIREMENTS 🚨
-            - This chart has TWO variables: ${chartSpec.y} (left axis) and ${y2Label} (right axis)
-            - You MUST generate insights for BOTH variables - this is MANDATORY
-            - Generate at least 2 insights for ${chartSpec.y} and at least 2 insights for ${y2Label}
-            - Each insight MUST clearly specify which variable it addresses in the title or observation
-            - DO NOT focus only on ${chartSpec.y} - you MUST analyze ${y2Label} as well
-            - If your response only mentions ${chartSpec.y} and ignores ${y2Label}, it is WRONG and INCOMPLETE
-            - Balance your insights - analyze both ${chartSpec.y} and ${y2Label} equally
-            - Be concise, specific, and actionable. Output valid JSON. 
-            - Recommendations must be quantified with actual numbers from the data (ranges, thresholds, targets). No hallucinations.`
-            : 'You are a data analyst providing specific insights and recommendations for individual charts. Be concise, specific, and actionable. Output valid JSON. CRITICAL: Recommendations must be quantified with actual numbers from the data (ranges, thresholds, targets). No hallucinations.',
+          content: 'You are a precise data analyst. Output JSON with exactly two short fields: keyInsight and recommendation. Each must be 1–2 sentences (≤220 chars), chart-specific, include numbers, and be actionable. No bullets.'
         },
-        {
-          role: 'user',
-          content: prompt,
-        },
+        { role: 'user', content: prompt },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.6,
-      max_tokens: 1200,
+      temperature: 0.35,
+      max_tokens: 220,
     });
 
     const content = response.choices[0].message.content || '{}';
@@ -553,32 +439,29 @@ Output JSON:
         }
       }
       
-      const formattedInsights = result.insights.slice(0, 5).map((insight: any, idx: number) => {
-        const title = insight.title || `**Insight ${idx + 1}**`;
-        const observation = insight.observation || insight.text || '';
-        const whyItMatters = insight.whyItMatters || '';
-        const recommendation = insight.recommendation || '';
-        
-        return `${title}\n${observation}\n\n**Why it matters:** ${whyItMatters}\n\n**Actionable Recommendation:** ${recommendation}`;
-      }).join('\n\n---\n\n');
-      
-      // Combine all recommendations for the recommendation field
-      const allRecommendations = result.insights
-        .slice(0, 5)
-        .map((insight: any) => insight.recommendation || '')
-        .filter((rec: string) => rec.length > 0)
-        .join(' | ');
-      
+      // Build ultra-concise per-chart keyInsight and recommendation (1-2 sentences each)
+      const take = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
+      const cap = (s: string, n = 220) => s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
+      const first = result.insights[0] || {};
+      const title = take(first.title || 'Insight');
+      const observation = take(first.observation || first.text || '');
+      const recText = take(first.recommendation || '');
+
+      const conciseInsight = cap([title, observation].filter(Boolean).join(': '));
+      const conciseRecommendation = cap(recText.length ? recText : 'Consider an actionable adjustment based on the observed pattern.');
+
       return {
-        keyInsight: formattedInsights,
-        recommendation: allRecommendations || result.insights[0]?.recommendation || "Consider further analysis to understand the underlying factors"
+        keyInsight: conciseInsight,
+        recommendation: conciseRecommendation,
       };
     }
 
     // Fallback to single insight format if AI didn't return array
+    const take = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
+    const cap = (s: string, n = 220) => s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
     return {
-      keyInsight: result.keyInsight || "Data shows interesting patterns worth investigating",
-      recommendation: result.recommendation || "Consider further analysis to understand the underlying factors"
+      keyInsight: cap(take(result.keyInsight || "Data shows interesting patterns worth investigating")),
+      recommendation: cap(take(result.recommendation || "Consider further analysis to understand the underlying factors")),
     };
   } catch (error) {
     console.error('Error generating chart insights:', error);
