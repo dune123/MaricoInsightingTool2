@@ -59,6 +59,12 @@ export const corsConfig = cors({
       return callback(null, true);
     }
     
+    // Allow any Render domain in production
+    if (process.env.NODE_ENV === 'production' && origin && origin.includes('.onrender.com')) {
+      console.log('Allowing Render domain:', origin);
+      return callback(null, true);
+    }
+    
     // Allow localhost in development
     if (process.env.NODE_ENV !== 'production' && origin && origin.includes('localhost')) {
       console.log('Allowing localhost in development:', origin);

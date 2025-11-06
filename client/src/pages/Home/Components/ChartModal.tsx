@@ -84,17 +84,17 @@ export function ChartModal({ isOpen, onClose, chart }: ChartModalProps) {
               />
               {chart.y2 ? (
                 <>
-                  <YAxis
+              <YAxis
                     tick={{ fill: leftAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
                     stroke={leftAxisColor}
-                    tickFormatter={formatAxisLabel}
-                    width={90}
+                tickFormatter={formatAxisLabel}
+                width={90}
                     label={{ value: yLabel || y, angle: -90, position: 'left', style: { textAnchor: 'middle', fill: leftAxisColor, fontSize: 16, fontWeight: 600 } }}
-                    yAxisId="left"
-                  />
-                  <YAxis
-                    orientation="right"
-                    yAxisId="right"
+                yAxisId="left"
+              />
+                <YAxis
+                  orientation="right"
+                  yAxisId="right"
                     tick={{ fill: rightAxisColor, fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 500 }}
                     stroke={rightAxisColor}
                     tickFormatter={formatAxisLabel}
