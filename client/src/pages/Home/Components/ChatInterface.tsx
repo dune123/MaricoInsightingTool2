@@ -11,15 +11,13 @@ interface ChatInterfaceProps {
   onSendMessage: (message: string) => void;
   onUploadNew: () => void;
   isLoading: boolean;
-  onLoadHistory?: () => void;
-  canLoadHistory?: boolean;
-  loadingHistory?: boolean;
   sampleRows?: Record<string, any>[];
   columns?: string[];
   numericColumns?: string[];
   dateColumns?: string[];
   totalRows?: number;
   totalColumns?: number;
+  sessionId?: string;
 }
 
 const SUGGESTIONS = [
@@ -34,9 +32,6 @@ export function ChatInterface({
   onSendMessage, 
   onUploadNew, 
   isLoading, 
-  onLoadHistory,
-  canLoadHistory = false,
-  loadingHistory = false,
   sampleRows, 
   columns,
   numericColumns,
@@ -77,15 +72,6 @@ export function ChatInterface({
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto px-4 py-4 space-y-4">
-          <div className="flex justify-between items-center mb-2">
-            <div />
-            {onLoadHistory && canLoadHistory && (
-              <Button variant="outline" size="sm" onClick={onLoadHistory} disabled={loadingHistory || isLoading}>
-                {loadingHistory ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : null}
-                Load chat history
-              </Button>
-            )}
-          </div>
           {messages.map((message, idx) => (
             <MessageBubble 
               key={idx} 

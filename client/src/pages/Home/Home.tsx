@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { FileUpload } from '@/pages/Home/Components/FileUpload';
 import { ChatInterface } from './Components/ChatInterface';
 import { useHomeState, useHomeMutations, useHomeHandlers } from './modules';
-import { sessionsApi } from '@/lib/api';
 
 interface HomeProps {
   resetTrigger?: number;
@@ -10,7 +9,6 @@ interface HomeProps {
 }
 
 export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps) {
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const {
     sessionId,
     messages,
@@ -58,21 +56,6 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
     chatMutation,
     resetState,
   });
-
-  const handleLoadHistory = async () => {
-    if (!sessionId || isLoadingHistory) return;
-    setIsLoadingHistory(true);
-    try {
-      const data = await sessionsApi.getSessionDetails(sessionId);
-      if (data && Array.isArray(data.messages)) {
-        setMessages(data.messages as any);
-      }
-    } catch (e) {
-      console.error('Failed to load chat history', e);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
 
   // Reset state only when resetTrigger changes (upload new file)
   useEffect(() => {
@@ -142,9 +125,6 @@ export default function Home({ resetTrigger = 0, loadedSessionData }: HomeProps)
       onSendMessage={handleSendMessage}
       onUploadNew={handleUploadNew}
       isLoading={chatMutation.isPending}
-      onLoadHistory={handleLoadHistory}
-      canLoadHistory={!!sessionId}
-      loadingHistory={isLoadingHistory}
       sampleRows={sampleRows}
       columns={columns}
       numericColumns={numericColumns}

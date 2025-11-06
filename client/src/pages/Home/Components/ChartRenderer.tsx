@@ -66,7 +66,9 @@ export function ChartRenderer({ chart, index, isSingleChart = false, showAddButt
 
   // Reset series when chart changes
   useEffect(() => {
-    setSeries(chart.data || []);
+    const chartData = chart.data || [];
+    console.log(`📈 ChartRenderer: Chart "${chart.title}" - Data points: ${chartData.length}`);
+    setSeries(chartData);
   }, [chart]);
 
   useEffect(() => {

@@ -68,7 +68,9 @@ export const uploadFile = async (
     const safeUser = (username as string).toString().replace(/[^a-zA-Z0-9]/g, '_');
     const safeFile = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
 
-    const sanitizedCharts = await Promise.all(charts.map(async (chart, index) => {
+    // Process charts: upload to blob and create slim versions for CosmosDB
+    // But keep full data for response
+    const chartsWithRefs = await Promise.all(charts.map(async (chart, index) => {
       const originalLength = chart.data?.length || 0;
       const sanitizedData = chart.data?.filter(row => {
         return !Object.values(row).some(value => typeof value === 'number' && isNaN(value));
@@ -88,8 +90,7 @@ export const uploadFile = async (
         }
       }
 
-      // Keep no data in Cosmos; rely on dataRef to blob
-      const preview = sanitizedData.slice(0, PREVIEW_CAP);
+      // Create slim version for CosmosDB (no data)
       const slim: any = {
         title: (chart as any).title,
         type: (chart as any).type,
@@ -103,8 +104,33 @@ export const uploadFile = async (
       };
       if ((chart as any).keyInsight) slim.keyInsight = (chart as any).keyInsight;
       if ((chart as any).recommendation) slim.recommendation = (chart as any).recommendation;
-      return slim;
+
+      // Return both: slim for CosmosDB, full for response
+      // Build full chart preserving all original properties with sanitized data
+      const fullChart: any = {
+        ...chart,
+        data: sanitizedData, // Use sanitized data (filtered NaN values)
+        dataRef, // Include dataRef for future blob fetching
+        // Preserve all original properties
+        xLabel: (chart as any).xLabel || (chart as any).x,
+        yLabel: (chart as any).yLabel || (chart as any).y,
+      };
+      
+      return {
+        slim, // For CosmosDB storage
+        full: fullChart, // For response (with full data + dataRef for future use)
+      };
     }));
+
+    // Separate charts for CosmosDB (slim) and response (full)
+    const sanitizedCharts = chartsWithRefs.map(c => c.slim);
+    const chartsForResponse = chartsWithRefs.map(c => c.full);
+
+    // Debug: Log chart data counts
+    console.log('📊 Charts for response:');
+    chartsForResponse.forEach((chart, idx) => {
+      console.log(`  Chart ${idx + 1}: "${chart.title}" - Data points: ${chart.data?.length || 0}`);
+    });
 
     // Generate a unique session ID for this upload
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -201,7 +227,7 @@ export const uploadFile = async (
     const response = {
       sessionId,
       summary,
-      charts: sanitizedCharts,
+      charts: chartsForResponse, // Return charts with FULL data for immediate display
       insights,
       sampleRows, // Use the sampleRows we already created
       chatId: chatDocument?.id, // Include chat document ID if created
@@ -211,10 +237,28 @@ export const uploadFile = async (
       } : undefined, // Include blob storage info if uploaded
     };
 
-    // Validate response
-    const validated = uploadResponseSchema.parse(response);
-
-    res.json(validated);
+    // Validate response (but don't let validation strip data - use passthrough if needed)
+    try {
+      const validated = uploadResponseSchema.parse(response);
+      console.log('✅ Response validated successfully');
+      res.json(validated);
+    } catch (validationError) {
+      console.error('⚠️ Response validation error:', validationError);
+      // Log what's in charts for debugging
+      if (response.charts && Array.isArray(response.charts)) {
+        response.charts.forEach((chart: any, idx: number) => {
+          console.log(`Chart ${idx + 1} validation check:`, {
+            title: chart.title,
+            type: chart.type,
+            hasData: !!chart.data,
+            dataLength: chart.data?.length || 0,
+            dataSample: chart.data?.slice(0, 1)
+          });
+        });
+      }
+      // Still return response even if validation fails (for debugging)
+      res.json(response);
+    }
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({

@@ -39,7 +39,14 @@ export const useHomeMutations = ({
       return await uploadFile<UploadResponse>('/api/upload', file);
     },
     onSuccess: (data) => {
-      console.log("upload chart data from the backend",data)
+      console.log("upload chart data from the backend", data);
+      console.log("📊 Charts received:", data.charts?.length || 0);
+      if (data.charts && Array.isArray(data.charts)) {
+        data.charts.forEach((chart: any, idx: number) => {
+          console.log(`  Chart ${idx + 1}: "${chart.title}" - Data points: ${chart.data?.length || 0}`);
+        });
+      }
+      
       setSessionId(data.sessionId);
       setInitialCharts(data.charts);
       setInitialInsights(data.insights);
